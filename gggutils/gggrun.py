@@ -36,44 +36,18 @@ def modify_i2s_input_params(filename, *args, new_file=None):
     # it gets copied to changes
     with tempfile.NamedTemporaryFile('w') as tfile:
         with open(filename, 'r') as robj, open(tfile.name, 'w') as wobj:
-            param_num = 1
-            subparam_num = 1
-            curr_param_lines = _nlines_for_param(param_num)
-
-            for line in robj:
-                # Anything after a colon is a comment. Lines that contain nothing but white space and/or comments are
-                # not parameters, so we split on the colon and check if the part before the colon has any non-whitespace
-                # characters.
-                line = line.split(':')
-                value = line[0]
-                if len(line) > 1:
-                    comment = ':'.join(line[1:])
-                else:
-                    comment = ''
-
-                is_param = len(value.strip()) > 0
+            for param_num, subparam_num, value, comment, is_param in iter_i2s_input_params(robj, include_all_lines=True):
+                curr_param_lines = _nlines_for_param(param_num)
                 if is_param:
-                    if len(i2s_params[param_num]) != curr_param_lines:
-                        raise ValueError('Parameter {param} requires {req} lines, only {n} given.'
-                                         .format(param=param_num, req=curr_param_lines, n=len(i2s_params[param_num])))
-
                     # Line has non-comment, non-whitespace characters. If it was one of the parameters to be changed,
                     # replace the value part. If not, just keep the value as-is.
                     if param_num in i2s_params:
+                        if len(i2s_params[param_num]) != curr_param_lines:
+                            raise ValueError('Parameter {param} requires {req} lines, only {n} given.'
+                                             .format(param=param_num, req=curr_param_lines, n=len(i2s_params[param_num])))
                         # to keep things pretty, capture existing whitespace between the value and any trailing comments
                         trailing_space = re.search(r'\s*$', value).group()
                         value = i2s_params[param_num][subparam_num-1] + trailing_space
-
-                    # Check if we've completed all the parts of the parameter - some require multiple lines. This is
-                    # defined by the _params_with_extra_lines dictionary in this module. If we've gotten all the
-                    # required lines, advance the parameter number. Otherwise, advance the indicator of which part
-                    # of the parameter we're on.
-                    if subparam_num == curr_param_lines:
-                        param_num += 1
-                        subparam_num = 1
-                        curr_param_lines = _nlines_for_param(param_num)
-                    else:
-                        subparam_num += 1
 
                 wobj.write(value)
 
@@ -119,3 +93,57 @@ def _mod_i2s_args_parsing(args):
     else:
         dict_out = {args[i]: args[i+1] for i in range(0, len(args), 2)}
         return check_dict_fmt(dict_out)
+
+
+def iter_i2s_input_params(fobj, include_all_lines=False):
+    """
+    Iterate over parameters in an I2S input file
+
+    :param fobj: an open file handle to the input file
+
+    :param include_all_lines: whether or not to return each line in the input file. Default is ``False``, which will
+     only return lines that are input parameters. ``True``
+
+    :return: iterator of I2S parameters. If ``include_all_lines`` is ``False``, then the returned values will be the
+     parameter number, parameter subpart number, the value part of the line, and the comment part of the line. If
+     ``include_all_lines`` is ``True`` then a boolean indicating whether the line is a parameter is returned as the
+     fifth value.
+    """
+    param_num = 1
+    subparam_num = 1
+    curr_param_lines = _nlines_for_param(param_num)
+
+    for line in fobj:
+        # Anything after a colon is a comment. Lines that contain nothing but white space and/or comments are
+        # not parameters, so we split on the colon and check if the part before the colon has any non-whitespace
+        # characters.
+        line = line.split(':')
+        value = line[0]
+        if len(line) > 1:
+            comment = ':'.join(line[1:])
+        else:
+            comment = ''
+
+        is_param = len(value.strip()) > 0
+        if include_all_lines:
+            if is_param:
+                pnum_to_yield = param_num
+                subpnum_to_yield = subparam_num
+            else:
+                pnum_to_yield = -1
+                subpnum_to_yield = -1
+            yield pnum_to_yield, subpnum_to_yield, value, comment, is_param
+        elif is_param:
+            yield param_num, subparam_num, value, comment
+
+        if is_param:
+            # Check if we've completed all the parts of the parameter - some require multiple lines. This is
+            # defined by the _params_with_extra_lines dictionary in this module. If we've gotten all the
+            # required lines, advance the parameter number. Otherwise, advance the indicator of which part
+            # of the parameter we're on.
+            if subparam_num == curr_param_lines:
+                param_num += 1
+                subparam_num = 1
+                curr_param_lines = _nlines_for_param(param_num)
+            else:
+                subparam_num += 1
