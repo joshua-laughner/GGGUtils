@@ -1,11 +1,13 @@
 from configobj import ConfigObj, flatten_errors
 import datetime as dt
 from glob import glob
+from multiprocessing import Pool
 import os
 import re
+from subprocess import Popen
 from validate import Validator
 
-from . import _etc_dir
+from . import _etc_dir, _i2s_halt_file
 from . import runutils, exceptions
 
 
@@ -32,7 +34,7 @@ def build_cfg_file(cfg_file, i2s_input_files, old_cfg_file=None):
     cfg = ConfigObj()
     cfg.filename = cfg_file
 
-    cfg['Run'] = {'run_top_dir': ''}
+    cfg['Run'] = {'run_top_dir': '', 'n_procs': 1}
     cfg['Run'].comments = {'run_top_dir': ['# The directory where the data are linked to to run I2S/GGG']}
     cfg['I2S'] = dict()
     cfg['Sites'] = dict()
@@ -421,18 +423,111 @@ def _get_date_cfg_option(site_cfg, datestr, optname):
                                          'overall site exception'.format(optname, key))
 
 
-def run_all_i2s(cfg_file):
-    cfg = load_config_file(cfg_file)
+def run_all_i2s(cfg_file, n_procs=1):
+    """
+    Run I2S for all days specified in a config file
 
+    :param cfg_file: the path to the config file
+    :type cfg_file: str
+
+    :param n_procs: the number of processors to use. If >1, a multiprocssing pool is spawned; if <= 1, execution occurs
+     in serial.
+    :type n_procs: int
+
+    :return: none
+    """
+    cfg = load_config_file(cfg_file)
+    # remove the halt file at the beginning rather than the end so that if this was launched twice the halt file is
+    # kept until everything ends.
+    remove_i2s_halt_file()
+
+    gggpath = os.getenv('GGGPATH')
+    if gggpath is None:
+        raise exceptions.GGGPathException('GGGPATH is not set. It must be set to use gggrun.')
+    i2s_cmd = os.path.join(gggpath, 'bin', 'i2s')
+    if not os.path.exists(i2s_cmd):
+        raise exceptions.GGGPathException('{} is not valid path. Please confirm your GGGPATH variable points to a '
+                                          'valid install of GGG.'.format(i2s_cmd))
+
+    pool_args = []
+    for site in cfg['Sites'].sections:
+        site_cfg = cfg['Sites'][site]
+        for datestr in site_cfg.sections:
+            this_run_dir = _date_subdir(cfg, site, datestr)
+            if n_procs > 1:
+                pool_args.append((this_run_dir, i2s_cmd))
+            else:
+                # I like to avoid opening a pool if only running with one processor because it's easier to debug; you
+                # can actually step into the run function.
+                _run_one_i2s(this_run_dir, i2s_cmd)
+
+    if len(pool_args) > 0:
+        with Pool(processes=n_procs) as pool:
+            pool.starmap(_run_one_i2s, pool_args)
+
+
+def _run_one_i2s(run_dir, i2s_cmd):
+    """
+    Run I2S for one day's interferograms
+
+    :param run_dir: the directory to execute I2S in
+    :type run_dir: str
+
+    :param i2s_cmd: the command to use to execute I2S
+    :type i2s_cmd: str
+
+    :return: none
+    """
+    if _should_i2s_stop():
+        return
+
+    possible_input_files = [os.path.basename(f) for f in glob(os.path.join(run_dir, '*i2s*.in'))]
+    if len(possible_input_files) > 1:
+        raise RuntimeError('Multiple I2S input files found in {}: {}'.format(
+            run_dir, ', '.join(possible_input_files))
+        )
+    elif len(possible_input_files) == 0:
+        raise RuntimeError('No I2S input files found in {}'.format(run_dir))
+    else:
+        i2s_input_file = possible_input_files[0]
+
+    now = dt.datetime.now()
+    log_file = os.path.join(run_dir, 'run_i2s_{}.log'.format(now.strftime('%Y%m%dT%H%M%S')))
+    with open(log_file, 'w') as log:
+        p = Popen([i2s_cmd, i2s_input_file], stdout=log, stderr=log, cwd=run_dir)
+        p.wait()
+
+
+def make_i2s_halt_file():
+    """
+    Create the file signaling batch I2S to stop
+    :return: none
+    """
+    msg = 'Requested to abort further I2S runs at {}\n'.format(dt.datetime.now())
+    # open in append as an extract guarantee that this file will always exist, so if it currently exists, it won't be
+    # truncated
+    with open(_i2s_halt_file, 'a') as wobj:
+        wobj.write(msg)
+
+
+def remove_i2s_halt_file():
+    """
+    Remove the file signaling batch I2S to stop
+    :return: none
+    """
+    if os.path.isfile(_i2s_halt_file):
+        os.remove(_i2s_halt_file)
+
+
+def _should_i2s_stop():
+    """
+    Return ``True`` if the batch I2S run should stop gracefully
+    :rtype: bool
+    """
+    return os.path.exists(_i2s_halt_file)
 
 
 def parse_build_cfg_args(parser):
-    """
-
-    :param parser:
-    :type parser: :class:`argparse.ArgumentParser`
-    :return:
-    """
     parser.description = 'Construct the starting config file for running I2S in bulk'
     parser.add_argument('cfg_file', help='The name to give the new config file')
     parser.add_argument('i2s_input_files', nargs='+', help='All the I2S input files to create I2S runs for. Note that '
@@ -446,12 +541,18 @@ def parse_build_cfg_args(parser):
 
 
 def parse_link_i2s_args(parser):
-    """
-
-    :param parser:
-    :type parser: :class:`argparse.ArgumentParser`
-    :return:
-    """
     parser.description = 'Link all the input files needed to run I2S in bulk'
     parser.add_argument('cfg_file', help='The config file to use to find the files to link')
     parser.set_defaults(driver_fxn=link_i2s_input_files)
+
+
+def parse_run_i2s_args(parser):
+    parser.description = 'Run I2S in bulk for all target interferograms specified in a config file'
+    parser.add_argument('cfg_file', help='The configuration file to use to drive the execution of I2S')
+    parser.add_argument('-n', '--n-procs', default=1, help='Number of processors to use to run I2S')
+    parser.set_defaults(driver_fxn=run_all_i2s)
+
+
+def parse_halt_i2s_args(parser):
+    parser.description = 'Tell a currently running bulk I2S program to finish the current sites then stop'
+    parser.set_defaults(driver_fxn=make_i2s_halt_file)

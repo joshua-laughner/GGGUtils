@@ -16,6 +16,12 @@ def parse_args():
     link_i2s_p = subp.add_parser('link-i2s-inputs', help='Link the input files to run I2S in bulk')
     gggrun.parse_link_i2s_args(link_i2s_p)
 
+    run_i2s_p = subp.add_parser('run-i2s', help='Run I2S in batch')
+    gggrun.parse_run_i2s_args(run_i2s_p)
+
+    halt_i2s_p = subp.add_parser('halt-i2s', help='Halt an active batch I2S run')
+    gggrun.parse_halt_i2s_args(halt_i2s_p)
+
     args = vars(p.parse_args())
     return args
 

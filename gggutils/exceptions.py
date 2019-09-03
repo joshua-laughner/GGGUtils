@@ -16,3 +16,11 @@ class SiteDateException(Exception):
 
 class ConfigException(Exception):
     pass
+
+
+class GGGException(Exception):
+    pass
+
+
+class GGGPathException(GGGException):
+    pass
