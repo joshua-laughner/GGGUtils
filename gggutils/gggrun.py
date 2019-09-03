@@ -126,12 +126,12 @@ def link_i2s_input_files(cfg_file):
             uses_slices = _get_date_cfg_option(sect_cfg, datestr=datesect, optname='slices')
 
             if not uses_slices:
-                _link_igms(sect_cfg, datestr=datesect, run_top_dir=run_top_dir, i2s_opts=cfg['I2S'])
+                _link_igms(cfg=cfg, site=sect, datestr=datesect, i2s_opts=cfg['I2S'])
             else:
-                _link_slices(sect_cfg, datestr=datesect, run_top_dir=run_top_dir, i2s_opts=cfg['I2S'])
+                _link_slices(cfg=cfg, site=sect, datestr=datesect, i2s_opts=cfg['I2S'])
 
 
-def _link_igms(site_cfg, datestr, run_top_dir, i2s_opts):
+def _link_igms(cfg, site, datestr, i2s_opts):
     """
     Link full interferogram files to the appropriate site/date run directory; set up the flimit and opus-i2s.in files
 
@@ -152,9 +152,9 @@ def _link_igms(site_cfg, datestr, run_top_dir, i2s_opts):
     if not re.match(r'[a-z]{2}\d{8}', datestr):
         raise ValueError('datestr must have the format xxYYYYMMDD')
 
-    igms_dir, i2s_input_file, src_igm_dir = _link_common(site_cfg=site_cfg, datestr=datestr, run_top_dir=run_top_dir,
-                                                         i2s_opts=i2s_opts, link_subdir='igms',
-                                                         input_file_basename='opus-i2s.in')
+    site_cfg = cfg['Sites'][site]
+    igms_dir, i2s_input_file, src_igm_dir = _link_common(cfg=cfg, site=site, datestr=datestr, i2s_opts=i2s_opts,
+                                                         link_subdir='igms', input_file_basename='opus-i2s.in')
 
     # Read the input file and link all the listed files into the igms directory
     _, run_lines = runutils.read_i2s_input_params(i2s_input_file)
@@ -167,7 +167,7 @@ def _link_igms(site_cfg, datestr, run_top_dir, i2s_opts):
         os.symlink(src_file, os.path.join(igms_dir, runf))
 
 
-def _link_slices(site_cfg, datestr, run_top_dir, i2s_opts):
+def _link_slices(cfg, site, datestr, i2s_opts):
     """
     Link interferogram slices into the appropriate site/date run directory, set up the flimit and slice-i2s.in files
 
@@ -188,9 +188,9 @@ def _link_slices(site_cfg, datestr, run_top_dir, i2s_opts):
 
     :return: none
     """
-    igms_dir, i2s_input_file, src_igm_dir = _link_common(site_cfg=site_cfg, datestr=datestr, run_top_dir=run_top_dir,
-                                                         i2s_opts=i2s_opts, link_subdir='slices',
-                                                         input_file_basename='slice-i2s.in')
+    site_cfg = cfg['Sites'][site]
+    igms_dir, i2s_input_file, src_igm_dir = _link_common(cfg=cfg, site=site, datestr=datestr, i2s_opts=i2s_opts,
+                                                         link_subdir='slices', input_file_basename='slice-i2s.in')
 
     slices_need_org = _get_date_cfg_option(site_cfg, datestr, 'slices_in_subdir')
     if slices_need_org:
@@ -251,12 +251,15 @@ def _link_slices_needs_org(slice_files, run_lines, run_lines_index, dest_run_dir
             os.symlink(slicef, os.path.join(scans_dir, os.path.basename(slicef)))
 
 
-def _link_common(site_cfg, datestr, run_top_dir, i2s_opts, link_subdir, input_file_basename):
+def _link_common(cfg, site, datestr, i2s_opts, link_subdir, input_file_basename):
     """
     Helper function that handles the common steps for linking full interferograms or slices
 
-    :param site_cfg: the config section for this site as a whole, including all dates
-    :type site_cfg: :class:`configobj.Section`
+    :param cfg: the configuration object
+    :type cfg: :class:`configobj.Section`
+
+    :param site: the two-letter site abbreviation; i.e. the subsection in cfg['Sites'] representing this site
+    :type site: str
 
     :param datestr: the subsection key for this particular date. Must be "xxYYYYMMDD", cannot just be the date.
     :type datestr: str
@@ -278,7 +281,7 @@ def _link_common(site_cfg, datestr, run_top_dir, i2s_opts, link_subdir, input_fi
      created in the run directory, and the directory where the interferograms/slice directories can be linked from.
     :rtype: str, str, str
     """
-    site_abbrv = site_cfg.name
+    site_cfg = cfg['Sites'][site]
     site_root_dir = _get_date_cfg_option(site_cfg, datestr=datestr, optname='site_root_dir')
     site_subdir = _get_date_cfg_option(site_cfg, datestr=datestr, optname='subdir')
     i2s_input_file = _get_date_cfg_option(site_cfg, datestr=datestr, optname='i2s_input_file')
@@ -286,7 +289,7 @@ def _link_common(site_cfg, datestr, run_top_dir, i2s_opts, link_subdir, input_fi
     i2s_opts = {int(k): v for k, v in i2s_opts.items()}
 
     src_igm_dir = os.path.abspath(os.path.join(site_root_dir, datestr, site_subdir))
-    date_dir = os.path.join(run_top_dir, site_abbrv, datestr)
+    date_dir = _date_subdir()
     igms_dir = os.path.join(date_dir, link_subdir)
     if not os.path.exists(igms_dir):
         os.makedirs(igms_dir)
@@ -331,6 +334,13 @@ def _group_uses_slices(site_dict):
         return '1', 'slices'
     else:
         return '0', 'igms'
+
+
+def _date_subdir(cfg, site, datestr):
+    run_top_dir = cfg['Run']['run_top_dir']
+    site_sect = cfg['Sites'][site]
+    datestr = _find_site_datekey(site_sect, datestr)
+    return os.path.join(run_top_dir, site_sect.name, datestr)
 
 
 def _group_i2s_input_files(input_files):
@@ -409,6 +419,11 @@ def _get_date_cfg_option(site_cfg, datestr, optname):
     else:
         raise exceptions.ConfigException('The option "{}" was not found in the date-specific section ({}) nor the '
                                          'overall site exception'.format(optname, key))
+
+
+def run_all_i2s(cfg_file):
+    cfg = load_config_file(cfg_file)
+
 
 
 def parse_build_cfg_args(parser):
