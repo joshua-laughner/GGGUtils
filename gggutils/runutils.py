@@ -2,6 +2,29 @@ import re
 import shutil
 import tempfile
 
+from . import _run_cols_for_full, _run_cols_for_slices
+from . import exceptions
+
+
+def finalize_target_dirs(target_dirs, dirs_list=None):
+    """
+    Combine command line list of target directories with those in a file
+
+    :param target_dirs: list of directories
+    :type target_dirs: list(str)
+
+    :param dirs_list: a path to a file containing one directory per line to add to the list of target directories
+    :type dirs_list: str or None
+
+    :return: the combined list of target directories
+    :rtype: list(str)
+    """
+    if dirs_list is not None:
+        with open(dirs_list, 'r') as robj:
+            extra_dirs = [l.strip() for l in robj.readlines()]
+        target_dirs.extend(extra_dirs)
+    return target_dirs
+
 
 def modify_i2s_input_params(filename, *args, new_file=None):
     """

@@ -2,13 +2,27 @@ from glob import glob
 import os
 import re
 
+from . import runutils
+
 
 def tabulate_targets(out_file, target_dirs, dirs_list=None):
-    import pdb; pdb.set_trace()
-    if dirs_list is not None:
-        with open(dirs_list, 'r') as robj:
-            extra_dirs = [l.strip() for l in robj.readlines()]
-        target_dirs.extend(extra_dirs)
+    """
+    Create a .csv file indicating which data revisions for target data contain which dates
+
+    :param out_file: the filename to give the .csv file
+    :type out_file: str
+
+    :param target_dirs: a list of target directories to search. These are directories that contain subdirectories named
+     ``xxYYYYMMDD`` where "xx" is the site abbreviation and YYYYMMDD the year, month, and day.
+    :type target_dirs: list(str)
+
+    :param dirs_list: a path to a text file that lists one target directory per line. These will be added to the end of
+     the ``target_dirs`` list. If ``None``, then no file is read.
+    :type dirs_list: str or None
+
+    :return: none, writes a .csv file
+    """
+    target_dirs = runutils.finalize_target_dirs(target_dirs, dirs_list=dirs_list)
 
     with open(out_file, 'w') as wobj:
         for tdir in target_dirs:
