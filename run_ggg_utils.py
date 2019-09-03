@@ -1,10 +1,12 @@
 from argparse import ArgumentParser
 
-from gggutils import target_utils, gggrun
+from gggutils import target_utils, gggrun, ggglogging
 
 
 def parse_args():
     p = ArgumentParser(description='Run parts of GGGUtils')
+    ggglogging.add_logging_clargs(p)
+
     subp = p.add_subparsers()
 
     tabp = subp.add_parser('tab-tgts', help='Tabulate available target files')
@@ -28,6 +30,7 @@ def parse_args():
 
 def main():
     args = parse_args()
+    ggglogging.setup_logging_from_clargs(args)
     driver = args.pop('driver_fxn')
     driver(**args)
 

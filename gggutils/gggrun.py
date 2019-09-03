@@ -1,6 +1,7 @@
 from configobj import ConfigObj, flatten_errors
 import datetime as dt
 from glob import glob
+from logging import getLogger
 from multiprocessing import Pool
 import os
 import re
@@ -9,6 +10,9 @@ from validate import Validator
 
 from . import _etc_dir, _i2s_halt_file
 from . import runutils, exceptions
+
+
+logger = getLogger('gggrun')
 
 
 def build_cfg_file(cfg_file, i2s_input_files, old_cfg_file=None):
@@ -120,16 +124,17 @@ def link_i2s_input_files(cfg_file):
     # If the slices aren't already in this structure, then we need to create it. We'll have to parse the input file to
     # figure out which slice numbers go with with run.
 
-    run_top_dir = cfg['Run']['run_top_dir']
-
     for sect in cfg['Sites'].sections:
         sect_cfg = cfg['Sites'][sect]
+        logger.info('Linking files for {}'.format(sect))
         for datesect in sect_cfg.sections:
             uses_slices = _get_date_cfg_option(sect_cfg, datestr=datesect, optname='slices')
 
             if not uses_slices:
+                logger.debug('Linking full igrams for {}'.format(datesect))
                 _link_igms(cfg=cfg, site=sect, datestr=datesect, i2s_opts=cfg['I2S'])
             else:
+                logger.debug('Linking slices for {}'.format(datesect))
                 _link_slices(cfg=cfg, site=sect, datestr=datesect, i2s_opts=cfg['I2S'])
 
 
@@ -154,7 +159,6 @@ def _link_igms(cfg, site, datestr, i2s_opts):
     if not re.match(r'[a-z]{2}\d{8}', datestr):
         raise ValueError('datestr must have the format xxYYYYMMDD')
 
-    site_cfg = cfg['Sites'][site]
     igms_dir, i2s_input_file, src_igm_dir = _link_common(cfg=cfg, site=site, datestr=datestr, i2s_opts=i2s_opts,
                                                          link_subdir='igms', input_file_basename='opus-i2s.in')
 
@@ -208,6 +212,7 @@ def _link_slices(cfg, site, datestr, i2s_opts):
             os.symlink(os.path.join(src_igm_dir, slice_run_dir), os.path.join(igms_dir, slice_run_dir),
                        target_is_directory=True)  # not entirely sure the difference using target_is_directory
         else:
+            logger.debug('Setting up correct directory structure for linked slices')
             _link_slices_needs_org(slice_files=slice_files, run_lines=run_lines, run_lines_index=idx,
                                    dest_run_dir=os.path.join(igms_dir, slice_run_dir))
 
@@ -448,7 +453,7 @@ def run_all_i2s(cfg_file, n_procs=1):
     if not os.path.exists(i2s_cmd):
         raise exceptions.GGGPathException('{} is not valid path. Please confirm your GGGPATH variable points to a '
                                           'valid install of GGG.'.format(i2s_cmd))
-
+    logger.debug('Will run I2S from {}'.format(i2s_cmd))
     pool_args = []
     for site in cfg['Sites'].sections:
         site_cfg = cfg['Sites'][site]
@@ -479,6 +484,7 @@ def _run_one_i2s(run_dir, i2s_cmd):
     :return: none
     """
     if _should_i2s_stop():
+        logger.debug('I2S halt file exists. Aborting run in {}'.format(run_dir))
         return
 
     possible_input_files = [os.path.basename(f) for f in glob(os.path.join(run_dir, '*i2s*.in'))]
@@ -493,6 +499,8 @@ def _run_one_i2s(run_dir, i2s_cmd):
 
     now = dt.datetime.now()
     log_file = os.path.join(run_dir, 'run_i2s_{}.log'.format(now.strftime('%Y%m%dT%H%M%S')))
+    logger.info('Starting I2S in {rundir} using {infile} as input file. I2S output piped to {log}.'
+                .format(rundir=run_dir, infile=i2s_input_file, log=log_file))
     with open(log_file, 'w') as log:
         p = Popen([i2s_cmd, i2s_input_file], stdout=log, stderr=log, cwd=run_dir)
         p.wait()
@@ -515,6 +523,7 @@ def remove_i2s_halt_file():
     Remove the file signaling batch I2S to stop
     :return: none
     """
+    logger.debug('Removing I2S halt file ({}) if exists'.format(_i2s_halt_file))
     if os.path.isfile(_i2s_halt_file):
         os.remove(_i2s_halt_file)
 
