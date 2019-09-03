@@ -134,7 +134,7 @@ def read_i2s_input_params(infile, last_header=28):
 
     header_params = []
     run_files = []
-    with open(infile, 'r') as robj:
+    with open(infile, 'rb') as robj:
         for paramnum, partnum, value, comment in iter_i2s_input_params(robj):
             value = value.strip()
             if paramnum <= last_header:
@@ -180,6 +180,8 @@ def iter_i2s_input_params(fobj, include_all_lines=False):
     curr_param_lines = _nlines_for_param(param_num)
 
     for line in fobj:
+        if isinstance(line, bytes):
+            line = line.decode('utf8', errors='replace')
         # Anything after a colon is a comment. Lines that contain nothing but white space and/or comments are
         # not parameters, so we split on the colon and check if the part before the colon has any non-whitespace
         # characters.

@@ -110,7 +110,7 @@ def link_i2s_input_files(cfg_file):
 
     :return: none, links files at the paths specified in the config
     """
-    cfg = ConfigObj(cfg_file)
+    cfg = load_config_file(cfg_file)
     # Create a directory structure: SiteName/xxYYYYMMDD/<igms or slices> and link the individual igms or slice YYMMDD.R
     # directories. If using igms, then the igm files go directly in the igms directory. If using slices, then the
     # structure under slices must be "YYMMDD.R/scan/b*".
@@ -123,9 +123,9 @@ def link_i2s_input_files(cfg_file):
     for sect in cfg['Sites'].sections:
         sect_cfg = cfg['Sites'][sect]
         for datesect in sect_cfg.sections:
-            uses_slices = _get_date_cfg_option(sect_cfg, datestr=datesect, optname='slices') not in ('0', 'False')
+            uses_slices = _get_date_cfg_option(sect_cfg, datestr=datesect, optname='slices')
 
-            if uses_slices:
+            if not uses_slices:
                 _link_igms(sect_cfg, datestr=datesect, run_top_dir=run_top_dir, i2s_opts=cfg['I2S'])
             else:
                 _link_slices(sect_cfg, datestr=datesect, run_top_dir=run_top_dir, i2s_opts=cfg['I2S'])
@@ -231,7 +231,7 @@ def _link_slices_needs_org(slice_files, run_lines, run_lines_index, dest_run_dir
     :return: none
     """
     scans_dir = os.path.join(dest_run_dir, 'scan')
-    start_slice_num = run_lines[run_lines_index]['slice']
+    start_slice_num = int(run_lines[run_lines_index]['slice'])
     try:
         end_slice_num = int(run_lines[run_lines_index+1]['slice'])
     except IndexError:
@@ -245,7 +245,7 @@ def _link_slices_needs_org(slice_files, run_lines, run_lines_index, dest_run_dir
         slice_num = int(re.search(r'\d+', os.path.basename(slicef)).group())
         if slice_num < start_slice_num:
             continue
-        elif slice_num >= end_slice_num:
+        elif end_slice_num is not None and slice_num >= end_slice_num:
             return
         else:
             os.symlink(slicef, os.path.join(scans_dir, os.path.basename(slicef)))
@@ -279,7 +279,7 @@ def _link_common(site_cfg, datestr, run_top_dir, i2s_opts, link_subdir, input_fi
     :rtype: str, str, str
     """
     site_abbrv = site_cfg.name
-    site_root_dir = _get_date_cfg_option(site_cfg, datestr=datestr, optname='sect_root_dir')
+    site_root_dir = _get_date_cfg_option(site_cfg, datestr=datestr, optname='site_root_dir')
     site_subdir = _get_date_cfg_option(site_cfg, datestr=datestr, optname='subdir')
     i2s_input_file = _get_date_cfg_option(site_cfg, datestr=datestr, optname='i2s_input_file')
     # convert configobj.Section to dictionary and make a copy at the same time
