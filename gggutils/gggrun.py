@@ -5,6 +5,7 @@ from logging import getLogger
 from multiprocessing import Pool
 import os
 import re
+import shutil
 from subprocess import Popen
 from validate import Validator
 
@@ -107,12 +108,22 @@ def load_config_file(cfg_file):
     return cfg
 
 
-def link_i2s_input_files(cfg_file):
+def link_i2s_input_files(cfg_file, overwrite=False, clean_links=False, clean_spectra=False):
     """
     Link all the input interferograms/slices and the required input files for I2S into the batch run directory
 
     :param cfg_file: the path to the config file to use that specifies where the input data may be found
     :type cfg_file: str
+
+    :param overwrite: whether or not to overwrite existing symbolic links
+    :type overwrite: bool
+
+    :param clean_links: whether or not to delete the existing interferograms or slices directory to make way for new
+     links.
+    :type clean_links: bool
+
+    :param clean_spectra: whether or not to delete the existing spectra output directory to make way for new spectra.
+    :type clean_spectra: bool
 
     :return: none, links files at the paths specified in the config
     """
@@ -132,27 +143,39 @@ def link_i2s_input_files(cfg_file):
 
             if not uses_slices:
                 logger.debug('Linking full igrams for {}'.format(datesect))
-                _link_igms(cfg=cfg, site=sect, datestr=datesect, i2s_opts=cfg['I2S'])
+                _link_igms(cfg=cfg, site=sect, datestr=datesect, i2s_opts=cfg['I2S'], overwrite=overwrite,
+                           clean_links=clean_links, clean_spectra=clean_spectra)
             else:
                 logger.debug('Linking slices for {}'.format(datesect))
-                _link_slices(cfg=cfg, site=sect, datestr=datesect, i2s_opts=cfg['I2S'])
+                _link_slices(cfg=cfg, site=sect, datestr=datesect, i2s_opts=cfg['I2S'], overwrite=overwrite,
+                             clean_links=clean_links, clean_spectra=clean_spectra)
 
 
-def _link_igms(cfg, site, datestr, i2s_opts):
+def _link_igms(cfg, site, datestr, i2s_opts, overwrite, clean_links, clean_spectra):
     """
     Link full interferogram files to the appropriate site/date run directory; set up the flimit and opus-i2s.in files
 
-    :param site_cfg: the config section for this site as a whole, including all dates
-    :type site_cfg: :class:`configobj.Section`
+    :param cfg: the configuration object
+    :type cfg: :class:`configobj.Section`
+
+    :param site: the two-letter site abbreviation; i.e. the subsection in cfg['Sites'] representing this site
+    :type site: str
 
     :param datestr: the subsection key for this particular date. Must be "xxYYYYMMDD", cannot just be the date.
     :type datestr: str
 
-    :param run_top_dir: the top directory that all the sites' run dirs should be written to
-    :type run_top_dir: str
-
     :param i2s_opts: section with config-specified options for the i2s input files.
     :type i2s_opts: :class:`configobj.Section` or dict
+
+    :param overwrite: whether or not to overwrite existing symbolic links
+    :type overwrite: bool
+
+    :param clean_links: whether or not to delete the existing interferograms or slices directory to make way for new
+     links.
+    :type clean_links: bool
+
+    :param clean_spectra: whether or not to delete the existing spectra output directory to make way for new spectra.
+    :type clean_spectra: bool
 
     :return: none
     """
@@ -160,7 +183,8 @@ def _link_igms(cfg, site, datestr, i2s_opts):
         raise ValueError('datestr must have the format xxYYYYMMDD')
 
     igms_dir, i2s_input_file, src_igm_dir = _link_common(cfg=cfg, site=site, datestr=datestr, i2s_opts=i2s_opts,
-                                                         link_subdir='igms', input_file_basename='opus-i2s.in')
+                                                         link_subdir='igms', input_file_basename='opus-i2s.in',
+                                                         clean_links=clean_links, clean_spectra=clean_spectra)
 
     # Read the input file and link all the listed files into the igms directory
     _, run_lines = runutils.read_i2s_input_params(i2s_input_file)
@@ -170,33 +194,44 @@ def _link_igms(cfg, site, datestr, i2s_opts):
         if not os.path.isfile(src_file):
             raise exceptions.I2SDataException('Expected source file {src} (run line #{lnum} in {infile}) does not exist'
                                               .format(src=src_file, lnum=i, infile=i2s_input_file))
-        os.symlink(src_file, os.path.join(igms_dir, runf))
+        _make_link(src_file, os.path.join(igms_dir, runf), overwrite=overwrite)
 
 
-def _link_slices(cfg, site, datestr, i2s_opts):
+def _link_slices(cfg, site, datestr, i2s_opts, overwrite=False, clean_links=False, clean_spectra=False):
     """
     Link interferogram slices into the appropriate site/date run directory, set up the flimit and slice-i2s.in files
 
     This function also handles the case where the slice interferograms are not properly organized into YYMMDD.R/scan
     folders and does that organization if needed.
 
-    :param site_cfg: the config section for this site as a whole, including all dates
-    :type site_cfg: :class:`configobj.Section`
+    :param cfg: the configuration object
+    :type cfg: :class:`configobj.Section`
+
+    :param site: the two-letter site abbreviation; i.e. the subsection in cfg['Sites'] representing this site
+    :type site: str
 
     :param datestr: the subsection key for this particular date. Must be "xxYYYYMMDD", cannot just be the date.
     :type datestr: str
 
-    :param run_top_dir: the top directory that all the sites' run dirs should be written to
-    :type run_top_dir: str
-
     :param i2s_opts: section with config-specified options for the i2s input files.
     :type i2s_opts: :class:`configobj.Section` or dict
+
+    :param overwrite: whether or not to overwrite existing symbolic links
+    :type overwrite: bool
+
+    :param clean_links: whether or not to delete the existing interferograms or slices directory to make way for new
+     links.
+    :type clean_links: bool
+
+    :param clean_spectra: whether or not to delete the existing spectra output directory to make way for new spectra.
+    :type clean_spectra: bool
 
     :return: none
     """
     site_cfg = cfg['Sites'][site]
     igms_dir, i2s_input_file, src_igm_dir = _link_common(cfg=cfg, site=site, datestr=datestr, i2s_opts=i2s_opts,
-                                                         link_subdir='slices', input_file_basename='slice-i2s.in')
+                                                         link_subdir='slices', input_file_basename='slice-i2s.in',
+                                                         clean_links=clean_links, clean_spectra=clean_spectra)
 
     slices_need_org = _get_date_cfg_option(site_cfg, datestr, 'slices_in_subdir')
     if slices_need_org:
@@ -209,15 +244,15 @@ def _link_slices(cfg, site, datestr, i2s_opts):
         run_date = dt.datetime(int(line['year']), int(line['month']), int(line['day'])).strftime('%y%m%d')
         slice_run_dir = '{}.{}'.format(run_date, line['run'])
         if not slices_need_org:
-            os.symlink(os.path.join(src_igm_dir, slice_run_dir), os.path.join(igms_dir, slice_run_dir),
-                       target_is_directory=True)  # not entirely sure the difference using target_is_directory
+            _make_link(os.path.join(src_igm_dir, slice_run_dir), os.path.join(igms_dir, slice_run_dir),
+                       overwrite=overwrite, target_is_directory=True)  # not entirely sure the difference using target_is_directory
         else:
             logger.debug('Setting up correct directory structure for linked slices')
             _link_slices_needs_org(slice_files=slice_files, run_lines=run_lines, run_lines_index=idx,
-                                   dest_run_dir=os.path.join(igms_dir, slice_run_dir))
+                                   dest_run_dir=os.path.join(igms_dir, slice_run_dir), overwrite=overwrite)
 
 
-def _link_slices_needs_org(slice_files, run_lines, run_lines_index, dest_run_dir):
+def _link_slices_needs_org(slice_files, run_lines, run_lines_index, dest_run_dir, overwrite):
     """
     Helper function for :func:`_link_slices` that organizes slice links into the proper YYMMDD.R/scan directories
 
@@ -234,6 +269,9 @@ def _link_slices_needs_org(slice_files, run_lines, run_lines_index, dest_run_dir
     :param dest_run_dir: the YYMMDD.R run directory that :file:`scan` and the links to the slice files should be created
      in.
     :type dest_run_dir: str
+
+    :param overwrite: whether or not to overwrite existing symbolic links
+    :type overwrite: bool
 
     :return: none
     """
@@ -255,10 +293,11 @@ def _link_slices_needs_org(slice_files, run_lines, run_lines_index, dest_run_dir
         elif end_slice_num is not None and slice_num >= end_slice_num:
             return
         else:
-            os.symlink(slicef, os.path.join(scans_dir, os.path.basename(slicef)))
+            _make_link(slicef, os.path.join(scans_dir, os.path.basename(slicef)), overwrite=overwrite)
 
 
-def _link_common(cfg, site, datestr, i2s_opts, link_subdir, input_file_basename):
+def _link_common(cfg, site, datestr, i2s_opts, link_subdir, input_file_basename, clean_links=False,
+                 clean_spectra=False):
     """
     Helper function that handles the common steps for linking full interferograms or slices
 
@@ -284,6 +323,13 @@ def _link_common(cfg, site, datestr, i2s_opts, link_subdir, input_file_basename)
     :param input_file_basename: the name to give the I2S .in file. Usually either "opus-i2s.in" or "slice-i2s.in".
     :type input_file_basename: str
 
+    :param clean_links: whether or not to delete the existing interferograms or slices directory to make way for new
+     links.
+    :type clean_links: bool
+
+    :param clean_spectra: whether or not to delete the existing spectra output directory to make way for new spectra.
+    :type clean_spectra: bool
+
     :return: the directory where the interferograms/slice directories should be linked, the path to the I2S input file
      created in the run directory, and the directory where the interferograms/slice directories can be linked from.
     :rtype: str, str, str
@@ -298,6 +344,9 @@ def _link_common(cfg, site, datestr, i2s_opts, link_subdir, input_file_basename)
     src_igm_dir = os.path.abspath(os.path.join(site_root_dir, datestr, site_subdir))
     date_dir = _date_subdir()
     igms_dir = os.path.join(date_dir, link_subdir)
+    if clean_links and os.path.exists(igms_dir):
+        logger.info('Removing existing igrams directory: {}'.format(igms_dir))
+        shutil.rmtree(igms_dir)
     if not os.path.exists(igms_dir):
         os.makedirs(igms_dir)
 
@@ -308,6 +357,9 @@ def _link_common(cfg, site, datestr, i2s_opts, link_subdir, input_file_basename)
 
     # Make an output spectra directory
     spectra_dir = os.path.join(date_dir, 'spectra')
+    if os.path.exists(spectra_dir) and clean_spectra:
+        logger.info('Removing existing spectra directory: {}'.format(spectra_dir))
+        shutil.rmtree(spectra_dir)
     if not os.path.exists(spectra_dir):
         os.makedirs(spectra_dir)
 
@@ -320,6 +372,18 @@ def _link_common(cfg, site, datestr, i2s_opts, link_subdir, input_file_basename)
     runutils.modify_i2s_input_params(i2s_input_file, std_i2s_opts, new_file=new_i2s_input_file)
 
     return igms_dir, new_i2s_input_file, src_igm_dir
+
+
+def _make_link(src, dst, overwrite=False, **kwargs):
+    if os.path.exists(dst):
+        if overwrite:
+            logger.debug('Overwriting existing symlink: {}'.format(dst))
+            os.remove(dst)
+        else:
+            logger.debug('Symlink exists, not overwriting: {}'.format(dst))
+            return
+
+    os.symlink(src, dst, **kwargs)
 
 
 def _group_uses_slices(site_dict):
@@ -552,6 +616,9 @@ def parse_build_cfg_args(parser):
 def parse_link_i2s_args(parser):
     parser.description = 'Link all the input files needed to run I2S in bulk'
     parser.add_argument('cfg_file', help='The config file to use to find the files to link')
+    parser.add_argument('-o', '--overwrite', action='store_true', help='Overwrite existing symbolic links')
+    parser.add_argument('--clean-links', action='store_true', help='Clean up (delete) existing symbolic links')
+    parser.add_argument('--clean-spectra', action='store_true', help='Clean up (delete) the existing spectra directory')
     parser.set_defaults(driver_fxn=link_i2s_input_files)
 
 
