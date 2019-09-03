@@ -118,6 +118,49 @@ def _mod_i2s_args_parsing(args):
         return check_dict_fmt(dict_out)
 
 
+def read_i2s_input_params(infile, last_header=28):
+    def parse_run_line(line):
+        line = line.split()
+        if len(line) == _run_cols_for_slices:
+            keys = ('year', 'month', 'day', 'run', 'slice')
+        elif len(line) <= _run_cols_for_full:
+            keys = ('opus_file', 'year', 'month', 'day', 'run', 'lat', 'lon', 'alt', 'Tins', 'Pins', 'Hins',
+                    'Tout', 'Pout', 'Hout', 'SIA', 'FVSI', 'WSPD', 'WDIR')
+        else:
+            raise exceptions.I2SFormatException('I2S input file ({}) had {} columns for the igram list, expected '
+                                                'no more than {}'
+                                                .format(infile, len(line), _run_cols_for_full))
+        return {k: v for k, v in zip(keys, line)}
+
+    header_params = []
+    run_files = []
+    with open(infile, 'r') as robj:
+        for paramnum, partnum, value, comment in iter_i2s_input_params(robj):
+            value = value.strip()
+            if paramnum <= last_header:
+                if len(header_params) < paramnum:
+                    header_params.append(value)
+                else:
+                    header_params[paramnum-1] += '\n'+value
+            else:
+                run_files.append(parse_run_line(value))
+
+    return header_params, run_files
+
+
+def i2s_use_slices(infile):
+    _, igrams = read_i2s_input_params(infile)
+    n = len(igrams[0])
+    if n == _run_cols_for_slices:
+        return True
+    elif n <= _run_cols_for_full:
+        return False
+    else:
+        raise exceptions.I2SFormatException('I2S input file ({}) had {} columns for the igram list, expected '
+                                            'no more than {}'
+                                            .format(infile, n, _run_cols_for_full))
+
+
 def iter_i2s_input_params(fobj, include_all_lines=False):
     """
     Iterate over parameters in an I2S input file
