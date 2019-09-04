@@ -231,6 +231,7 @@ def _link_slices(cfg, site, datestr, i2s_opts, overwrite=False, clean_links=Fals
     site_cfg = cfg['Sites'][site]
     igms_dir, i2s_input_file, src_igm_dir = _link_common(cfg=cfg, site=site, datestr=datestr, i2s_opts=i2s_opts,
                                                          link_subdir='slices', input_file_basename='slice-i2s.in',
+                                                         overwrite=overwrite,
                                                          clean_links=clean_links, clean_spectra=clean_spectra)
 
     slices_need_org = _get_date_cfg_option(site_cfg, datestr, 'slices_in_subdir')
@@ -296,8 +297,8 @@ def _link_slices_needs_org(slice_files, run_lines, run_lines_index, dest_run_dir
             _make_link(slicef, os.path.join(scans_dir, os.path.basename(slicef)), overwrite=overwrite)
 
 
-def _link_common(cfg, site, datestr, i2s_opts, link_subdir, input_file_basename, clean_links=False,
-                 clean_spectra=False):
+def _link_common(cfg, site, datestr, i2s_opts, link_subdir, input_file_basename, overwrite=False,
+                 clean_links=False, clean_spectra=False):
     """
     Helper function that handles the common steps for linking full interferograms or slices
 
@@ -342,7 +343,7 @@ def _link_common(cfg, site, datestr, i2s_opts, link_subdir, input_file_basename,
     i2s_opts = {int(k): v for k, v in i2s_opts.items()}
 
     src_igm_dir = os.path.abspath(os.path.join(site_root_dir, datestr, site_subdir))
-    date_dir = _date_subdir()
+    date_dir = _date_subdir(cfg, site, datestr)
     igms_dir = os.path.join(date_dir, link_subdir)
     if clean_links and os.path.exists(igms_dir):
         logger.info('Removing existing igrams directory: {}'.format(igms_dir))
@@ -353,7 +354,7 @@ def _link_common(cfg, site, datestr, i2s_opts, link_subdir, input_file_basename,
     # Link the flimit file into the date dir with a consistent name to make setting up the input file easier
     src_flimit = _get_date_cfg_option(site_cfg, datestr=datestr, optname='flimit_file')
     src_flimit = os.path.abspath(src_flimit)
-    os.symlink(src_flimit, os.path.join(date_dir, 'flimit.i2s'))
+    _make_link(src_flimit, os.path.join(date_dir, 'flimit.i2s'), overwrite=overwrite)
 
     # Make an output spectra directory
     spectra_dir = os.path.join(date_dir, 'spectra')

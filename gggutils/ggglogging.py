@@ -17,7 +17,7 @@ def add_logging_clargs(parser):
 
 def setup_logging_from_clargs(args):
     verbosity = args.pop('verbose', 0)
-    to_file = args.pop(args, False)
+    to_file = args.pop('to_file', False)
     setup_logging(verbosity=verbosity, to_file=to_file)
 
 
@@ -36,5 +36,10 @@ def setup_logging(verbosity, to_file):
         file_h = logging.FileHandler(filename=filename)
         file_h.setFormatter(formatter)
         logger.addHandler(file_h)
+    else:
+        # this is needed to make the level work - see https://stackoverflow.com/a/31899833
+        stream_h = logging.StreamHandler()
+        stream_h.setFormatter(formatter)
+        logger.addHandler(stream_h)
 
     logger.setLevel(verbosity_dict[verbosity])
