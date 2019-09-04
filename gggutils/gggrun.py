@@ -552,6 +552,7 @@ def _run_one_i2s(run_dir, i2s_cmd):
         logger.debug('I2S halt file exists. Aborting run in {}'.format(run_dir))
         return
 
+    old_spectra = _list_completed_spectra(run_dir)
     possible_input_files = [os.path.basename(f) for f in glob(os.path.join(run_dir, '*i2s*.in'))]
     if len(possible_input_files) > 1:
         raise RuntimeError('Multiple I2S input files found in {}: {}'.format(
@@ -569,6 +570,27 @@ def _run_one_i2s(run_dir, i2s_cmd):
     with open(log_file, 'w') as log:
         p = Popen([i2s_cmd, i2s_input_file], stdout=log, stderr=log, cwd=run_dir)
         p.wait()
+
+    current_spectra = _list_completed_spectra(run_dir)
+    _compare_completed_spectra(old_spectra, current_spectra, run_dir)
+
+
+def _list_completed_spectra(run_dir):
+    spectra = dict()
+    spectra_files = os.path.join(run_dir, 'spectra', '*')
+    for f in spectra_files:
+        spectra[os.path.basename(f)] = os.path.getmtime(f)
+    return spectra
+
+
+def _compare_completed_spectra(old_dict, new_dict, run_dir):
+    new_files = []
+    for fname, mtime in new_dict.items():
+        if fname not in old_dict or mtime > old_dict[fname]:
+            new_files.append(fname)
+    logger.info('{} new spectra created in {}'.format(len(new_files), run_dir))
+    logger.debug('New spectra are: {}'.format(', '.join(new_files)))
+    return new_files
 
 
 def make_i2s_halt_file():
