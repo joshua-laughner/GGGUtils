@@ -1,3 +1,4 @@
+from collections import OrderedDict
 from configobj import ConfigObj, flatten_errors
 import datetime as dt
 from glob import glob
@@ -10,7 +11,7 @@ from subprocess import Popen
 from validate import Validator
 
 from . import _etc_dir, _i2s_halt_file
-from . import runutils, exceptions
+from . import runutils, exceptions, target_utils
 
 
 logger = getLogger('gggrun')
@@ -107,6 +108,58 @@ def load_config_file(cfg_file):
     cfg.walk(make_paths_abs)
 
     return cfg
+
+
+def make_i2s_run_files(run_file_dir, run_files=None, dirs_list=None):
+    avail_target_dates = target_utils.build_target_dirs_dict(target_dirs=[], dirs_list=dirs_list,
+                                                             flat=True, full_datestr=True)
+    for site, site_dict in avail_target_dates.items():
+        run_files = _list_existing_i2s_run_files(site_dict, run_file_dir=run_file_dir, run_files=run_files)
+
+        # Find the first date string key that has a file associated with it. If there are any dates before that missing
+        # a file, we'll use that file to fill in.
+        key_with_file = None
+        for datestr, runfile in run_files.items():
+            if runfile is not None:
+                key_with_file = datestr
+                break
+
+        # Now for each target date, if it has a file, reset the last key found to have a file to that, so that we use
+        # the most recent file before a missing date as the template if we need to make a new input file. If there's not
+        # a file, then copy one to be that file.
+        for datestr, runfile in run_files.items():
+            if runfile is None:
+                _make_new_i2s_run_file(datestr=datestr, run_files=run_files, last_key_with_file=key_with_file)
+            else:
+                key_with_file = datestr
+
+
+def _list_existing_i2s_run_files(target_date_dict, run_file_dir, run_files=None):
+    target_dates = runutils.sort_datestr(target_date_dict.keys())
+    # Get the site abbreviation from the target dates. Assume its always the first two characters of the date strings.
+    site_abbrev = set(td[:2] for td in target_dates)
+    if len(site_abbrev) != 1:
+        raise ValueError('target_date_dict appears to contain multiple sites')
+    else:
+        site_abbrev = site_abbrev.pop()
+
+    # List the input files and find all of them that have the site abbreviation in them.
+    if run_files is None:
+        run_files = glob(os.path.join(run_file_dir, '*.in'))
+
+    run_files = [f for f in run_files if re.search(site_abbrev + r'\d{8}', os.path.basename(f)) is not None]
+    run_file_dict = {re.search(r'\d{8}', os.path.basename(f)).group(): f for f in run_files}
+    run_file_dict = [(k, run_file_dict[k]) if k in run_file_dict else (k, None) for k in target_dates]
+    run_file_dict = OrderedDict(run_file_dict)
+    return run_file_dict
+
+
+def _make_new_i2s_run_file(datestr, run_files, last_key_with_file):
+    new_base_file = os.path.basename(run_files[last_key_with_file])
+    new_base_file = re.sub(r'\w\w\d{8}', datestr, new_base_file)
+    new_file = os.path.join(os.path.dirname(run_files[last_key_with_file]), new_base_file)
+    logger.info('Copying {} to {}'.format(run_files[last_key_with_file], new_file))
+    shutil.copy2(run_files[last_key_with_file], new_file)
 
 
 def link_i2s_input_files(cfg_file, overwrite=False, clean_links=False, clean_spectra=False):
@@ -639,6 +692,24 @@ def parse_build_cfg_args(parser):
                              'have their values inserted in the new config file.')
 
     parser.set_defaults(driver_fxn=build_cfg_file)
+
+
+def parse_make_i2s_runfile_args(parser):
+    """
+
+    :param parser: :class:`argparse.ArgumentParser`
+    :return:
+    """
+    parser.description = 'Create I2S input files for missing days.'
+    parser.add_argument('target_dir_list', dest='dirs_list',
+                        help='File containing a list of target directories (directories with subdirectories named '
+                             'xxYYYYMMDD), one per line.')
+    parser.add_argument('run_file_dir', help='Directory to put new run files. If no other positional arguments are '
+                                             'specified, must also contain the existing run files (with .in extension).')
+    parser.add_argument('run_files', nargs='*', default=None,
+                        help='Existing run files to use as templates. If any are given, then only those are used as '
+                             'templates rather than all .in files in the run_file_dir')
+    parser.set_defaults(driver_fxn=make_i2s_run_files)
 
 
 def parse_link_i2s_args(parser):

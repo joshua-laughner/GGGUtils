@@ -1,3 +1,4 @@
+import datetime as dt
 import re
 import shutil
 import tempfile
@@ -19,6 +20,9 @@ def finalize_target_dirs(target_dirs, dirs_list=None):
     :return: the combined list of target directories
     :rtype: list(str)
     """
+    if target_dirs is None:
+        target_dirs = []
+
     if dirs_list is not None:
         with open(dirs_list, 'r') as robj:
             extra_dirs = [l.strip() for l in robj.readlines()]
@@ -215,3 +219,11 @@ def iter_i2s_input_params(fobj, include_all_lines=False):
                 curr_param_lines = _nlines_for_param(param_num)
             else:
                 subparam_num += 1
+
+
+def sort_datestr(date_strings):
+    def keyfxn(dstr):
+        dstr = re.search(r'\d{8}', dstr).group()
+        return dt.datetime.strptime(dstr, '%Y%m%d')
+
+    return sorted(date_strings, key=keyfxn)

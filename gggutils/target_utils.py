@@ -39,7 +39,7 @@ def tabulate_targets(out_file, target_dirs, dirs_list=None):
             wobj.write('\n')
 
 
-def build_target_dirs_dict(target_dirs, dirs_list=None, key_by_basename=True, flat=False):
+def build_target_dirs_dict(target_dirs, dirs_list=None, key_by_basename=True, **kwargs):
     """
     Build a dictionary listing the available revisions for each target directory specified.
 
@@ -55,6 +55,8 @@ def build_target_dirs_dict(target_dirs, dirs_list=None, key_by_basename=True, fl
      :file:`/data/tccon/Ascension` would be just "Ascension"). If ``False``, then the full directory path is used.
     :type key_by_basename: bool
 
+    :param kwargs: additional keyword arguments, passed through to :func:`build_target_date_dict`
+
     :return: a dictionary of dictionaries where the top keys are the site name or path, and the next keys are the date
      strings (in YYYYMMDD format). If ``flat`` is ``False``, the final dictionary will have the revisions as keys and
      the values will be ``True`` if that date is available in that revision, ``False`` otherwise. If ``flat`` is
@@ -69,11 +71,11 @@ def build_target_dirs_dict(target_dirs, dirs_list=None, key_by_basename=True, fl
     target_dict = dict()
     for this_tdir in target_dirs:
         key = os.path.basename(this_tdir.rstrip(os.sep)) if key_by_basename else this_tdir
-        target_dict[key] = build_target_date_dict(this_tdir)
+        target_dict[key] = build_target_date_dict(this_tdir, **kwargs)
     return target_dict
 
 
-def build_target_date_dict(target_dir, flat=True):
+def build_target_date_dict(target_dir, flat=False, full_datestr=False):
     """
     Build a dictionary describing which dates are contained in which revisions for a given target.
 
@@ -82,6 +84,10 @@ def build_target_date_dict(target_dir, flat=True):
 
     :param flat: set to ``True`` to return a flat (one-layer) dictionary. See ``return`` for more details.
     :type flat: bool
+
+    :param full_datestr: set to ``True`` to keep the full date string (including the site abbreviation) in the dict
+     keys. ``False`` (default) only keeps the date part.
+    :type full_datestr: bool
 
     :return: if ``flat`` is ``False``, the returned dictionary will be two levels: the first will have the date strings
      (in YYYYMMDD format) as keys, the second will have the revisions as keys and the values will be ``True`` if that
@@ -92,11 +98,12 @@ def build_target_date_dict(target_dir, flat=True):
     """
     rev_dirs = ['.'] + glob(os.path.join(target_dir, 'R?'))
     rev_names = [os.path.basename(r) for r in rev_dirs]
+    date_re = re.compile(r'\w\w\d{8}') if full_datestr else re.compile(r'(?<=\w\w)\d{8}')
     date_dict = dict()
     for rdir, rname in zip(rev_dirs, rev_names):
         date_dirs = glob(os.path.join(target_dir, rname, '*'))
         for ddir in date_dirs:
-            datestr = re.search(r'(?<=\w\w)\d{8}', os.path.basename(ddir))
+            datestr = date_re.search(os.path.basename(ddir))
             if datestr is None:
                 # not a date dir
                 continue

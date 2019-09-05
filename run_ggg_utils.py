@@ -15,6 +15,9 @@ def parse_args():
     build_cfg_p = subp.add_parser('build-i2s-cfg', help='Build the config file to run I2S in bulk.')
     gggrun.parse_build_cfg_args(build_cfg_p)
 
+    make_i2s_runfiles_p = subp.add_parser('make-i2s-runfiles', help='Make missing I2S run files')
+    gggrun.parse_make_i2s_runfile_args(make_i2s_runfiles_p)
+
     link_i2s_p = subp.add_parser('link-i2s-inputs', help='Link the input files to run I2S in bulk')
     gggrun.parse_link_i2s_args(link_i2s_p)
 
