@@ -577,7 +577,7 @@ def _run_one_i2s(run_dir, i2s_cmd):
 
 def _list_completed_spectra(run_dir):
     spectra = dict()
-    spectra_files = os.path.join(run_dir, 'spectra', '*')
+    spectra_files = glob(os.path.join(run_dir, 'spectra', '*'))
     for f in spectra_files:
         spectra[os.path.basename(f)] = os.path.getmtime(f)
     return spectra
