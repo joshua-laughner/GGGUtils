@@ -52,6 +52,7 @@ def build_cfg_file(cfg_file, i2s_input_files, old_cfg_file=None):
         slices, subdir = _group_uses_slices(site_dict)
         site_opts = {'slices': slices,
                      'site_root_dir': '',
+                     'no_date_dir': '0',
                      'subdir': subdir,
                      'slices_in_subdir': '0',
                      'flimit_file': ''}
@@ -337,12 +338,16 @@ def _link_common(cfg, site, datestr, i2s_opts, link_subdir, input_file_basename,
     """
     site_cfg = cfg['Sites'][site]
     site_root_dir = _get_date_cfg_option(site_cfg, datestr=datestr, optname='site_root_dir')
+    no_date_dir = _get_date_cfg_option(site_cfg, datestr=datestr, optname='no_date_dir')
     site_subdir = _get_date_cfg_option(site_cfg, datestr=datestr, optname='subdir')
     i2s_input_file = _get_date_cfg_option(site_cfg, datestr=datestr, optname='i2s_input_file')
     # convert configobj.Section to dictionary and make a copy at the same time
     i2s_opts = {int(k): v for k, v in i2s_opts.items()}
 
-    src_igm_dir = os.path.abspath(os.path.join(site_root_dir, datestr, site_subdir))
+    if no_date_dir:
+        src_igm_dir = os.path.abspath(os.path.join(site_root_dir, site_subdir))
+    else:
+        src_igm_dir = os.path.abspath(os.path.join(site_root_dir, datestr, site_subdir))
     date_dir = _date_subdir(cfg, site, datestr)
     igms_dir = os.path.join(date_dir, link_subdir)
     if clean_links and os.path.exists(igms_dir):
