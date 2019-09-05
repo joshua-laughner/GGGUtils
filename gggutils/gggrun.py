@@ -110,17 +110,20 @@ def load_config_file(cfg_file):
     return cfg
 
 
-def make_i2s_run_files(dirs_list, run_files, run_file_save_dir):
+def make_i2s_run_files(dirs_list, run_files, run_file_save_dir, overwrite=False):
 
     avail_target_dates = target_utils.build_target_dirs_dict(target_dirs=[], dirs_list=dirs_list,
                                                              flat=True, full_datestr=True)
     for site, site_dict in avail_target_dates.items():
-        run_files = _list_existing_i2s_run_files(site_dict, run_files=run_files)
+        if len(site_dict) == 0:
+            logger.info('No date folders found for {}'.format(site))
+            continue
+        run_file_dict = _list_existing_i2s_run_files(site_dict, run_files=run_files)
 
         # Find the first date string key that has a file associated with it. If there are any dates before that missing
         # a file, we'll use that file to fill in.
         key_with_file = None
-        for datestr, runfile in run_files.items():
+        for datestr, runfile in run_file_dict.items():
             if runfile is not None:
                 key_with_file = datestr
                 break
@@ -128,10 +131,10 @@ def make_i2s_run_files(dirs_list, run_files, run_file_save_dir):
         # Now for each target date, if it has a file, reset the last key found to have a file to that, so that we use
         # the most recent file before a missing date as the template if we need to make a new input file. If there's not
         # a file, then copy one to be that file.
-        for datestr, runfile in run_files.items():
+        for datestr, runfile in run_file_dict.items():
             if runfile is None:
-                _make_new_i2s_run_file(datestr=datestr, run_files=run_files, last_key_with_file=key_with_file,
-                                       save_dir=run_file_save_dir)
+                _make_new_i2s_run_file(datestr=datestr, run_files=run_file_dict, last_key_with_file=key_with_file,
+                                       save_dir=run_file_save_dir, overwrite=overwrite)
             else:
                 key_with_file = datestr
 
@@ -141,25 +144,33 @@ def _list_existing_i2s_run_files(target_date_dict, run_files):
     # Get the site abbreviation from the target dates. Assume its always the first two characters of the date strings.
     site_abbrev = set(td[:2] for td in target_dates)
     if len(site_abbrev) != 1:
-        raise ValueError('target_date_dict appears to contain multiple sites')
+        raise ValueError('target_date_dict appears to contain multiple sites: {}'.format(', '.join(site_abbrev)))
     else:
         site_abbrev = site_abbrev.pop()
 
     run_files = [f for f in run_files if re.search(site_abbrev + r'\d{8}', os.path.basename(f)) is not None]
-    run_file_dict = {re.search(r'\d{8}', os.path.basename(f)).group(): f for f in run_files}
+    run_file_dict = {re.search(r'\w\w\d{8}', os.path.basename(f)).group(): f for f in run_files}
     run_file_dict = [(k, run_file_dict[k]) if k in run_file_dict else (k, None) for k in target_dates]
     run_file_dict = OrderedDict(run_file_dict)
     return run_file_dict
 
 
-def _make_new_i2s_run_file(datestr, run_files, last_key_with_file, save_dir):
+def _make_new_i2s_run_file(datestr, run_files, last_key_with_file, save_dir, overwrite=False):
+    if last_key_with_file is None:
+        logger.warning('Cannot make a run file for {}: no existing files for that site'.format(datestr))
+        return 
     new_base_file = os.path.basename(run_files[last_key_with_file])
     new_base_file = re.sub(r'\w\w\d{8}', datestr, new_base_file)
     if save_dir is None:
         save_dir = os.path.dirname(run_files[last_key_with_file])
     new_file = os.path.join(save_dir, new_base_file)
     if os.path.exists(new_file):
-        raise IOError('Trying to make a run file that already exists: {}'.format(new_file))
+        if not overwrite:
+            logger.info('Not making {}, already exists'.format(new_file))
+            return
+        else:
+            logger.debug('Overwriting {}'.format(new_file))
+            os.remove(new_file)
     logger.info('Copying {} to {}'.format(run_files[last_key_with_file], new_file))
     shutil.copy2(run_files[last_key_with_file], new_file)
 
@@ -703,18 +714,17 @@ def parse_make_i2s_runfile_args(parser):
     :return:
     """
     parser.description = 'Create I2S input files for missing days.'
-    parser.add_argument('target_dir_list', dest='dirs_list',
+    parser.add_argument('dirs_list', metavar='target_dirs_list',
                         help='File containing a list of target directories (directories with subdirectories named '
                              'xxYYYYMMDD), one per line.')
-    parser.add_argument('run_file_dir', help='Directory to put new run files, unless --save-dir is given. If no other '
-                                             'positional arguments are specified, must also contain the existing run '
-                                             'files (with .in extension).')
     parser.add_argument('run_files', nargs='*', default=None,
                         help='Existing run files to use as templates. If any are given, then only those are used as '
                              'templates rather than all .in files in the run_file_dir')
     parser.add_argument('-s', '--save-dir', dest='run_file_save_dir',
                         help='Directory to write the new run files to. If not given, new files are saved to the same '
                              'directory as the file they are a copy of.')
+    parser.add_argument('-o', '--overwrite', action='store_true',
+                        help='Overwrite input files if the destination file already exists.')
     parser.set_defaults(driver_fxn=make_i2s_run_files)
 
 
