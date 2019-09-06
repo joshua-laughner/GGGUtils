@@ -187,10 +187,10 @@ def copy_i2s_run_files_from_target_dirs(dirs_list, save_dir, interactive='choice
 
             if len(site_input_files) == 0:
                 if interactive == 'all':
-                    print('No input files found in {}. Press ENTER to continue.'.format(full_site_dir), end='')
+                    print('\nNo input files found in {}. Press ENTER to continue.'.format(full_site_dir), end='')
                     input()
                 else:
-                    logger.info('No input files found in {}'.format(full_site_dir))
+                    logger.warning('No input files found in {}'.format(full_site_dir))
             elif len(site_input_files) == 1 and interactive != 'all':
                 input_file = site_input_files[0]
             elif interactive == 'none':
@@ -199,11 +199,11 @@ def copy_i2s_run_files_from_target_dirs(dirs_list, save_dir, interactive='choice
                                           .format(full_site_dir))
             else:
                 input_file_basenames = [os.path.basename(f) for f in site_input_files]
-                file_ind = uielements.user_input_list('Multiple input files found in {}. Choose one to move.',
+                file_ind = uielements.user_input_list('\nChoose input files from {} to move.'.format(full_site_dir),
                                                       input_file_basenames, returntype='index')
                 if file_ind is None:
-                    user_ans = uielements.user_input_list('Quit or skip to the next site/date?',
-                                                              ['Skip', 'Quit'], emptycancel=False, currentvalue='Skip')
+                    user_ans = uielements.user_input_list('\nQuit or skip to the next site/date?',
+                                                              ['Skip', 'Quit'], currentvalue='Skip')
                     if user_ans == 'Quit':
                         return
                     else:
