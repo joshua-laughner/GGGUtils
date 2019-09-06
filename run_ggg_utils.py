@@ -12,23 +12,8 @@ def parse_args():
     tabp = subp.add_parser('tab-tgts', help='Tabulate available target files')
     target_utils.parse_tab_args(tabp)
 
-    build_cfg_p = subp.add_parser('build-i2s-cfg', help='Build the config file to run I2S in bulk.')
-    i2srun.parse_build_cfg_args(build_cfg_p)
-
-    make_i2s_runfiles_p = subp.add_parser('make-i2s-runfiles', help='Make missing I2S run files')
-    i2srun.parse_make_i2s_runfile_args(make_i2s_runfiles_p)
-
-    copy_i2s_runfiles_p = subp.add_parser('copy-tgt-i2s-runfiles', help='Copy target I2S run files to a single directory')
-    i2srun.parse_copy_i2s_target_runfiles_args(copy_i2s_runfiles_p)
-
-    link_i2s_p = subp.add_parser('link-i2s-inputs', help='Link the input files to run I2S in bulk')
-    i2srun.parse_link_i2s_args(link_i2s_p)
-
-    run_i2s_p = subp.add_parser('run-i2s', help='Run I2S in batch')
-    i2srun.parse_run_i2s_args(run_i2s_p)
-
-    halt_i2s_p = subp.add_parser('halt-i2s', help='Halt an active batch I2S run')
-    i2srun.parse_halt_i2s_args(halt_i2s_p)
+    i2sp = subp.add_parser('i2s', help='I2S related commands.')
+    i2srun.parse_i2s_args(i2sp)
 
     args = vars(p.parse_args())
     return args

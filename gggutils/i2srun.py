@@ -756,7 +756,8 @@ def parse_make_i2s_runfile_args(parser):
     :param parser: :class:`argparse.ArgumentParser`
     :return:
     """
-    parser.description = 'Create I2S input files for missing days.'
+    parser.description = 'Create I2S input files for missing days. If you want to copy existing run files from ' \
+                         'scattered target directories into a single directory, see "cp-runs".'
     parser.add_argument('dirs_list', metavar='target_dirs_list',
                         help='File containing a list of target directories (directories with subdirectories named '
                              'xxYYYYMMDD), one per line.')
@@ -772,7 +773,8 @@ def parse_make_i2s_runfile_args(parser):
 
 
 def parse_copy_i2s_target_runfiles_args(parser):
-    parser.description = 'Copy I2S input files from target directories to a single directory.'
+    parser.description = 'Copy I2S input files from target directories to a single directory. If you need to create ' \
+                         'run files for dates that do not have one from existing run files, see "make-runs".'
     parser.add_argument('dirs_list', metavar='target_dirs_list',
                         help='File containing a list of target directories (directories with subdirectories named '
                              'xxYYYYMMDD), one per line.')
@@ -803,3 +805,25 @@ def parse_run_i2s_args(parser):
 def parse_halt_i2s_args(parser):
     parser.description = 'Tell a currently running bulk I2S program to finish the current sites then stop'
     parser.set_defaults(driver_fxn=make_i2s_halt_file)
+
+
+def parse_i2s_args(parser):
+    subp = parser.add_subparsers()
+
+    build_cfg = subp.add_parser('build-cfg', help='Build the config file to run I2S in bulk.')
+    parse_build_cfg_args(build_cfg)
+
+    make_runfiles = subp.add_parser('make-runs', help='Make missing I2S run files')
+    parse_make_i2s_runfile_args(make_runfiles)
+
+    cp_runfiles = subp.add_parser('cp-runs', help='Copy target I2S run files to a single directory')
+    parse_copy_i2s_target_runfiles_args(cp_runfiles)
+
+    link_i2s = subp.add_parser('link-inp', help='Link the input files to run I2S in bulk')
+    parse_link_i2s_args(link_i2s)
+
+    run_i2s = subp.add_parser('run', help='Run I2S in batch')
+    parse_run_i2s_args(run_i2s)
+
+    halt_i2s = subp.add_parser('halt', help='Gracefully halt an active batch I2S run')
+    parse_halt_i2s_args(halt_i2s)
