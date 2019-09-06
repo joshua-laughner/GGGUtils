@@ -8,5 +8,6 @@ setup(
     license='',
     author='Joshua Laughner',
     author_email='jlaugh@caltech.edu',
+    install_requires=['textui'],
     description='Ancilliary utilities to run GGG'
 )
