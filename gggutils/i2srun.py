@@ -801,8 +801,12 @@ def parse_mod_run_files_args(parser):
     :param parser: :class:`argparse.ArgumentParser`
     :return:
     """
-    parser.add_argument('-p', '--parameters', nargs='+')
-    parser.add_argument('-f', '--run-files', nargs='+')
+    parser.add_argument('-p', '--parameters', nargs='*', default=[],
+                        help='Parameters to change in the I2S run files. Must have an even number of arguments, '
+                             'alternating parameter number and new value. Example: "-p 1 ./igms 2 ./spectra" would '
+                             'change parameter #1 to "./igms" and #2 to "./spectra".')
+    parser.add_argument('-f', '--run-files', nargs='+',
+                        help='Run files to change. At least one must be given.')
     parser.add_argument('-s', '--save-dir', help='Directory to save the modified run files to')
     parser.add_argument('-b', '--backup', action='store_true', dest='backup_orig', default=None,
                         help='Always make a backup of the original file. The standard behavior is to only back up if '

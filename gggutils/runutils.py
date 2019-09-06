@@ -9,7 +9,7 @@ import tempfile
 from . import _run_cols_for_full, _run_cols_for_slices
 from . import exceptions
 
-_default_last_header_param = 28
+_default_last_header_param = 27
 logger = getLogger('runutils')
 
 
@@ -213,8 +213,9 @@ def iter_i2s_input_params(fobj, include_all_lines=False):
             line = line.decode('utf8', errors='replace')
         # Anything after a colon is a comment. Lines that contain nothing but white space and/or comments are
         # not parameters, so we split on the colon and check if the part before the colon has any non-whitespace
-        # characters.
-        line = line.split(':')
+        # characters. Also do NOT split if the colon is immediately followed by a backslash - this indicates that
+        # it is part of a Windows path (e.g. c:\tccon\documents).
+        line = re.split(r':(?=[^\\])', line, maxsplit=1)
         value = line[0]
         if len(line) > 1:
             comment = ':'.join(line[1:])
