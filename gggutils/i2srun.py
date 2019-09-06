@@ -8,6 +8,7 @@ import os
 import re
 import shutil
 from subprocess import Popen
+import sys
 from validate import Validator
 
 from textui import uielements
@@ -737,6 +738,67 @@ def _should_i2s_stop():
     return os.path.exists(_i2s_halt_file)
 
 
+def _cl_mod_runfile_driver(parameters, run_files, save_dir=None, backup_orig=None):
+    """
+    Command line driver to modify a set of parameters in a bunch of I2S run files
+
+    :param parameters: a list of the parameters to change, alternating number and value (both as strings)
+    :type parameters: list(str)
+
+    :param run_files: a list of the run files to alter
+    :type run_files: list(str)
+
+    :param save_dir: a directory to save the new files to. If omitted, then the original files are overwritten.
+    :type save_dir: str
+
+    :param backup_orig: make a backup of the original file. Default is to make a backup if overwriting the original file
+     and not to if copying. Set to ``False`` to never backup and ``True`` to always backup. Backups will be in the same
+     directory as the original with the ".orig" suffix. Old backups WILL be overwritten.
+    :type backup_orig: bool
+
+    :return:
+    """
+     
+    if backup_orig is None:
+        backup_orig = save_dir is None
+
+    for idx, param in enumerate(parameters):
+        try:
+            parameters[idx] = int(param)
+        except ValueError:
+            print('The parameter number in position {pos} ({val}) cannot be interpreted as an integer'
+                  .format(pos=idx+1, val=param), file=sys.stderr)
+
+    for rfile in run_files:
+        if backup_orig:
+            shutil.copy2(rfile, rfile + '.orig')
+
+        if save_dir is None:
+            new_file = None
+        else:
+            basename = os.path.basename(rfile)
+            new_file = os.path.join(save_dir, basename)
+
+        runutils.modify_i2s_input_params(rfile, *parameters, new_file=new_file)
+
+
+def parse_mod_run_files_args(parser):
+    """
+
+    :param parser: :class:`argparse.ArgumentParser`
+    :return:
+    """
+    parser.add_argument('-p', '--parameters', nargs='+')
+    parser.add_argument('-f', '--run-files', nargs='+')
+    parser.add_argument('-s', '--save-dir', help='Directory to save the modified run files to')
+    parser.add_argument('-b', '--backup', action='store_true', dest='backup_orig', default=None,
+                        help='Always make a backup of the original file. The standard behavior is to only back up if '
+                             'the original would be overwritten (i.e. --save-dir not specified).')
+    parser.add_argument('-n', '--no-backup', action='store_false', dest='backup_orig', default=None,
+                        help='Never make a backup of the original file.')
+    parser.set_defaults(driver_fxn=_cl_mod_runfile_driver)
+
+
 def parse_build_cfg_args(parser):
     parser.description = 'Construct the starting config file for running I2S in bulk'
     parser.add_argument('cfg_file', help='The name to give the new config file')
@@ -812,6 +874,9 @@ def parse_i2s_args(parser):
 
     build_cfg = subp.add_parser('build-cfg', help='Build the config file to run I2S in bulk.')
     parse_build_cfg_args(build_cfg)
+
+    mod_runfiles = subp.add_parser('mod-runs', help='Modify a batch of run files')
+    parse_mod_run_files_args(mod_runfiles)
 
     make_runfiles = subp.add_parser('make-runs', help='Make missing I2S run files')
     parse_make_i2s_runfile_args(make_runfiles)
