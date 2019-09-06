@@ -10,6 +10,8 @@ import shutil
 from subprocess import Popen
 from validate import Validator
 
+from textui import uielements
+
 from . import _etc_dir, _i2s_halt_file
 from . import runutils, exceptions, target_utils
 
@@ -173,6 +175,47 @@ def _make_new_i2s_run_file(datestr, run_files, last_key_with_file, save_dir, ove
             os.remove(new_file)
     logger.info('Copying {} to {}'.format(run_files[last_key_with_file], new_file))
     shutil.copy2(run_files[last_key_with_file], new_file)
+
+
+def copy_i2s_run_files_from_target_dirs(dirs_list, save_dir, interactive='choice'):
+    avail_target_dates = target_utils.build_target_dirs_dict([], dirs_list=dirs_list, flat=True,
+                                                             full_datestr=True, key_by_basename=False)
+    for site, site_dict in avail_target_dates.items():
+        for site_date, revision in site_dict.items():
+            full_site_dir = os.path.join(site, site_date, revision)
+            site_input_files = glob(os.path.join(full_site_dir, '*.in'))
+
+            if len(site_input_files) == 0:
+                if interactive == 'all':
+                    print('No input files found in {}. Press ENTER to continue.'.format(full_site_dir), end='')
+                    input()
+                else:
+                    logger.info('No input files found in {}'.format(full_site_dir))
+            elif len(site_input_files) == 1 and interactive != 'all':
+                input_file = site_input_files[0]
+            elif interactive == 'none':
+                # more than two input files found
+                raise NotImplementedError('More than two input files found in {} and interactive was "none"'
+                                          .format(full_site_dir))
+            else:
+                input_file_basenames = [os.path.basename(f) for f in site_input_files]
+                file_ind = uielements.user_input_list('Multiple input files found in {}. Choose one to move.',
+                                                      input_file_basenames, returntype='index')
+                if file_ind is None:
+                    user_ans = uielements.user_input_list('Quit or skip to the next site/date?',
+                                                              ['Skip', 'Quit'], emptycancel=False, currentvalue='Skip')
+                    if user_ans == 'Quit':
+                        return
+                    else:
+                        continue
+                else:
+                    input_file = site_input_files[file_ind]
+
+            prefix = 'opus-i2s' if re.match('opus', os.path.basename(input_file)) else 'slice-i2s'
+            new_base_filename = '{}.{}.in'.format(prefix, site_date)
+            new_fullname = os.path.join(save_dir, new_base_filename)
+            logger.info('Copying {} to {}'.format(input_file, new_fullname))
+            shutil.copy(input_file, new_fullname)
 
 
 def link_i2s_input_files(cfg_file, overwrite=False, clean_links=False, clean_spectra=False):
@@ -726,6 +769,19 @@ def parse_make_i2s_runfile_args(parser):
     parser.add_argument('-o', '--overwrite', action='store_true',
                         help='Overwrite input files if the destination file already exists.')
     parser.set_defaults(driver_fxn=make_i2s_run_files)
+
+
+def parse_copy_i2s_target_runfiles_args(parser):
+    parser.description = 'Copy I2S input files from target directories to a single directory.'
+    parser.add_argument('dirs_list', metavar='target_dirs_list',
+                        help='File containing a list of target directories (directories with subdirectories named '
+                             'xxYYYYMMDD), one per line.')
+    parser.add_argument('save_dir', help='Directory to save the copies to')
+    parser.add_argument('-i', '--interactive', choices=('choice', 'all', 'none'),
+                        help='Alter interactive behavior. "choice" will prompt the user to choose a file if multiple '
+                             'files are found. "all" will always prompt, no matter how many are found, and "none" will '
+                             'never prompt. Note that if multiple files are found, "none" will cause an error.')
+    parser.set_defaults(driver_fxn=copy_i2s_run_files_from_target_dirs)
 
 
 def parse_link_i2s_args(parser):
