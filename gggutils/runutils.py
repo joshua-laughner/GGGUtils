@@ -1,10 +1,16 @@
 import datetime as dt
+from logging import getLogger
+import ntpath
+import os
 import re
 import shutil
 import tempfile
 
 from . import _run_cols_for_full, _run_cols_for_slices
 from . import exceptions
+
+_default_last_header_param = 28
+logger = getLogger('runutils')
 
 
 def finalize_target_dirs(target_dirs, dirs_list=None):
@@ -30,7 +36,8 @@ def finalize_target_dirs(target_dirs, dirs_list=None):
     return target_dirs
 
 
-def modify_i2s_input_params(filename, *args, new_file=None):
+def modify_i2s_input_params(filename, *args, new_file=None, last_header_param=_default_last_header_param,
+                            **infile_actions):
     """
     Modify an I2S input file's common parameters. This cannot easily handle adding interferograms to process.
 
@@ -52,6 +59,12 @@ def modify_i2s_input_params(filename, *args, new_file=None):
     :param new_file: optional, if given, write the modified file to this path. If not given, overwrites the original
      files.
     :type new_file: str
+
+    :param infile_actions: additional keyword arguments specifying changes to make to the existing runfiles. Allowed
+     keywords are:
+
+        * "chdir" - replace the leading directory of any opus files listed at the bottom of the run file. Has no effect
+          on slice files. If the value is not a string, then the leading directories are just stripped.
 
     :return: None, writes new file.
     """
@@ -75,6 +88,18 @@ def modify_i2s_input_params(filename, *args, new_file=None):
                         # to keep things pretty, capture existing whitespace between the value and any trailing comments
                         trailing_space = re.search(r'\s*$', value).group()
                         value = i2s_params[param_num][subparam_num-1] + trailing_space
+                    elif param_num > last_header_param:
+                        if 'chdir' in infile_actions:
+                            value = re.split(r'\s+', value, maxsplit=1)
+                            if re.match(r'\s*\d{4}', value[0]):
+                                logger.info('Not removing opus file directory names in line "{}" because this looks '
+                                            'like a slice file (no file paths)')
+                            # os.path.basename will not split on backslashed on linux. ntpath.basename seems to split
+                            # on forward or backslashes
+                            value[0] = ntpath.basename(value[0])
+                            if isinstance(infile_actions['chdir'], str):
+                                value[0] = os.path.join(infile_actions['chdir'], value[0])
+                            value = ' '.join(value)
 
                 wobj.write(value)
 
@@ -122,7 +147,7 @@ def _mod_i2s_args_parsing(args):
         return check_dict_fmt(dict_out)
 
 
-def read_i2s_input_params(infile, last_header=28):
+def read_i2s_input_params(infile, last_header=_default_last_header_param):
     def parse_run_line(line):
         line = line.split()
         if len(line) == _run_cols_for_slices:

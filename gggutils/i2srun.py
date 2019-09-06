@@ -738,7 +738,7 @@ def _should_i2s_stop():
     return os.path.exists(_i2s_halt_file)
 
 
-def _cl_mod_runfile_driver(parameters, run_files, save_dir=None, backup_orig=None):
+def _cl_mod_runfile_driver(parameters, run_files, save_dir=None, backup_orig=None, infile_action=tuple()):
     """
     Command line driver to modify a set of parameters in a bunch of I2S run files
 
@@ -758,16 +758,29 @@ def _cl_mod_runfile_driver(parameters, run_files, save_dir=None, backup_orig=Non
 
     :return:
     """
-     
+
     if backup_orig is None:
         backup_orig = save_dir is None
 
     for idx, param in enumerate(parameters):
+        if idx % 2 == 1:
+            continue
+
         try:
             parameters[idx] = int(param)
         except ValueError:
-            print('The parameter number in position {pos} ({val}) cannot be interpreted as an integer'
+            print('ERROR: The parameter number in position {pos} ({val}) cannot be interpreted as an integer.'
                   .format(pos=idx+1, val=param), file=sys.stderr)
+            sys.exit(1)
+
+    # Convert the list of input file actions into a dict that we can expand into keywords.
+    infile_action_dict = dict()
+    for action in infile_action:
+        if ':' in action:
+            key, value = action.split(':')
+            infile_action_dict[key] = value
+        else:
+            infile_action_dict[action] = True
 
     for rfile in run_files:
         if backup_orig:
@@ -779,7 +792,7 @@ def _cl_mod_runfile_driver(parameters, run_files, save_dir=None, backup_orig=Non
             basename = os.path.basename(rfile)
             new_file = os.path.join(save_dir, basename)
 
-        runutils.modify_i2s_input_params(rfile, *parameters, new_file=new_file)
+        runutils.modify_i2s_input_params(rfile, *parameters, new_file=new_file, **infile_action_dict)
 
 
 def parse_mod_run_files_args(parser):
@@ -796,6 +809,12 @@ def parse_mod_run_files_args(parser):
                              'the original would be overwritten (i.e. --save-dir not specified).')
     parser.add_argument('-n', '--no-backup', action='store_false', dest='backup_orig', default=None,
                         help='Never make a backup of the original file.')
+    parser.add_argument('-i', '--infile-action', action='append', default=[],
+                        help='Actions to take on the list of input files at the bottom of the run files. Values have '
+                             'the form ACTION[:VALUE]. Allowed actions are: "chdir" change the directory of the opus '
+                             'input files (has no effect on a slice run file). "chdir" by itself just removes the '
+                             'leading directories; giving a value (e.g. "chdir:/home/tccon/") replaces the leading '
+                             'directories with the given path.')
     parser.set_defaults(driver_fxn=_cl_mod_runfile_driver)
 
 
