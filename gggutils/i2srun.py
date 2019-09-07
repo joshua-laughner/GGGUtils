@@ -881,7 +881,7 @@ def parse_copy_i2s_target_runfiles_args(parser):
                              'never prompt. Note that if multiple files are found, "none" will cause an error.')
     parser.add_argument('-o', '--overwrite', action='store_true', default=None,
                         help='Overwrite destination file if it exists. The default behavior is to ask.')
-    parser.add_argument('-n', '--no-overwrite', action='store_false', default=None,
+    parser.add_argument('-n', '--no-overwrite', action='store_false', default=None, dest='overwrite',
                         help='Never overwrite destination files if they exist. The default behavior is to ask.')
     parser.add_argument('-p', '--prefix', default=None,
                         help='The prefix to use for the copy made. If not specified, either "opus" or "slice" will be '
