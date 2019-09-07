@@ -43,7 +43,7 @@ def build_cfg_file(cfg_file, i2s_input_files, old_cfg_file=None):
     cfg = ConfigObj()
     cfg.filename = cfg_file
 
-    cfg['Run'] = {'run_top_dir': '', 'n_procs': 1}
+    cfg['Run'] = {'run_top_dir': ''}
     cfg['Run'].comments = {'run_top_dir': ['# The directory where the data are linked to to run I2S/GGG']}
     cfg['I2S'] = dict()
     cfg['Sites'] = dict()
