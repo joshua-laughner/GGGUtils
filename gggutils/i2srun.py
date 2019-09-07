@@ -178,7 +178,7 @@ def _make_new_i2s_run_file(datestr, run_files, last_key_with_file, save_dir, ove
     shutil.copy2(run_files[last_key_with_file], new_file)
 
 
-def copy_i2s_run_files_from_target_dirs(dirs_list, save_dir, interactive='choice', overwrite=None):
+def copy_i2s_run_files_from_target_dirs(dirs_list, save_dir, interactive='choice', overwrite=None, prefix=None):
     avail_target_dates = target_utils.build_target_dirs_dict([], dirs_list=dirs_list, flat=True,
                                                              full_datestr=True, key_by_basename=False)
     for site, site_dict in avail_target_dates.items():
@@ -212,8 +212,11 @@ def copy_i2s_run_files_from_target_dirs(dirs_list, save_dir, interactive='choice
                 else:
                     input_file = site_input_files[file_ind]
 
-            prefix = 'opus-i2s' if re.match('opus', os.path.basename(input_file)) else 'slice-i2s'
-            new_base_filename = '{}.{}.in'.format(prefix, site_date)
+            if prefix is None:
+                this_prefix = 'opus-i2s' if re.match('opus', os.path.basename(input_file)) else 'slice-i2s'
+            else:
+                this_prefix = prefix
+            new_base_filename = '{}.{}.in'.format(this_prefix, site_date)
             new_fullname = os.path.join(save_dir, new_base_filename)
             if os.path.exists(new_fullname) and overwrite is None:
                 this_ow = uielements.user_input_yn('{} exists. Overwrite?'.format(new_fullname))
@@ -880,6 +883,9 @@ def parse_copy_i2s_target_runfiles_args(parser):
                         help='Overwrite destination file if it exists. The default behavior is to ask.')
     parser.add_argument('-n', '--no-overwrite', action='store_false', default=None,
                         help='Never overwrite destination files if they exist. The default behavior is to ask.')
+    parser.add_argument('-p', '--prefix', default=None,
+                        help='The prefix to use for the copy made. If not specified, either "opus" or "slice" will be '
+                             'used, as appropriate.')
     parser.set_defaults(driver_fxn=copy_i2s_run_files_from_target_dirs)
 
 
