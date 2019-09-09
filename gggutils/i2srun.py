@@ -113,7 +113,7 @@ def load_config_file(cfg_file):
     return cfg
 
 
-def make_i2s_run_files(dirs_list, run_files, run_file_save_dir, overwrite=False):
+def make_i2s_run_files(dirs_list, run_files, run_file_save_dir, overwrite=False, slice_dir=None):
 
     avail_target_dates = target_utils.build_target_dirs_dict(target_dirs=[], dirs_list=dirs_list,
                                                              flat=True, full_datestr=True)
@@ -137,7 +137,7 @@ def make_i2s_run_files(dirs_list, run_files, run_file_save_dir, overwrite=False)
         for datestr, runfile in run_file_dict.items():
             if runfile is None:
                 _make_new_i2s_run_file(datestr=datestr, run_files=run_file_dict, last_key_with_file=key_with_file,
-                                       save_dir=run_file_save_dir, overwrite=overwrite)
+                                       save_dir=run_file_save_dir, overwrite=overwrite, slice_dir=slice_dir)
             else:
                 key_with_file = datestr
 
@@ -158,11 +158,13 @@ def _list_existing_i2s_run_files(target_date_dict, run_files):
     return run_file_dict
 
 
-def _make_new_i2s_run_file(datestr, run_files, last_key_with_file, save_dir, overwrite=False):
+def _make_new_i2s_run_file(datestr, run_files, last_key_with_file, save_dir, overwrite=False, slice_dir=None,
+                           file_type=None):
     if last_key_with_file is None:
         logger.warning('Cannot make a run file for {}: no existing files for that site'.format(datestr))
-        return 
-    new_base_file = os.path.basename(run_files[last_key_with_file])
+        return
+    old_file = run_files[last_key_with_file]
+    new_base_file = os.path.basename(old_file)
     new_base_file = re.sub(r'\w\w\d{8}', datestr, new_base_file)
     if save_dir is None:
         save_dir = os.path.dirname(run_files[last_key_with_file])
@@ -174,8 +176,29 @@ def _make_new_i2s_run_file(datestr, run_files, last_key_with_file, save_dir, ove
         else:
             logger.debug('Overwriting {}'.format(new_file))
             os.remove(new_file)
-    logger.info('Copying {} to {}'.format(run_files[last_key_with_file], new_file))
-    shutil.copy2(run_files[last_key_with_file], new_file)
+
+    logger.info('Copying {} to {}'.format(old_file, new_file))
+    # Need to duplicate this code here because add_slice_info will get the new location of the run file, which
+    # definitely won't have the slices relative to it
+    if slice_dir is None:
+        run_params = runutils.read_i2s_input_params(old_file)
+        slice_dir = run_params[1]
+        if not os.path.isabs(slice_dir):
+            slice_dir = os.path.join(os.path.dirname(old_file), slice_dir)
+
+    if file_type is None:
+        file_type = 'slice' if runutils.i2s_use_slices(old_file) else 'opus'
+
+    if file_type == 'slice':
+        add_slice_info_to_i2s_run_file(old_file, new_run_file=new_file, start_date=datestr, slice_dir=slice_dir)
+    elif file_type == 'opus':
+        # At the moment, I haven't implemented a way to figure out the input file list with opus format. So just copy
+        # everything but the list of files.
+        logger.warning('For {}, the list of input files will be blank because it is opus-format and auto-populating '
+                       'a list of opus files is not implemented'.format(new_base_file))
+        runutils.modify_i2s_input_params(old_file, new_file=new_file, include_input_files=False)
+    else:
+        raise ValueError('{} is not an allowed value for file_type. Must be "slice" or "opus"')
 
 
 def copy_i2s_run_files_from_target_dirs(dirs_list, save_dir, interactive='choice', overwrite=None, prefix=None):
@@ -228,6 +251,201 @@ def copy_i2s_run_files_from_target_dirs(dirs_list, save_dir, interactive='choice
             else:
                 logger.info('Copying {} to {}'.format(input_file, new_fullname))
                 shutil.copy(input_file, new_fullname)
+
+
+def add_slice_info_to_i2s_run_file(run_file, new_run_file=None, start_date=None, end_date=None, start_run=None,
+                                   end_run=None, slice_dir=None, scantype='Solar'):
+    """
+    Generate the slice_num of slice_num directories at the end of a slice_num-i2s input file.
+
+    The range of data included depends on what start/end dates and runs are specified:
+
+        * If no start or end date are given, then all data in the slices directory will be added.
+        * If only a start date is given, all data from that day will be added. If start or ending run numbers are given,
+          then only runs within that range are added. (Omitted one of the run numbers removes that limit, e.g. only
+          specifying a start run will include all runs >= that number.)
+        * If both a start and end date are given, then only data between those dates (inclusive) are added.
+        * If both a start and end date are given, *and* start and/or end run numbers are given, then all data between
+          start date + start run and end date + end run will be added, e.g. if the dates where 2019-01-01 to 2019-01-03
+          and the runs 5 and 3, then runs >= 5 on 2019-01-01, all runs on 2019-01-02, and runs <= 3 are included.
+
+    Start and end dates may be specified in a number of formats:
+
+        * datetime-like (i.e. :class:`datetime.datetime`, :class:`pandas.Timestamp`, etc.)
+        * A string in either YYMMDD or YYYYMMDD format.
+        * A string in either of the previous formats, but including the run number after a decimal point, e.g.
+          `190101.1` or `20190101.1`. *Note* that if a date is in this format and the corresponding run number is given
+          as a separate argument, an error will be raised.
+
+    Note that the date directories must currently include an :file:`IFSretr.log` file, as that is what is parsed to
+    identify which slices make up a full interferogram.
+
+    :param run_file: the run file to copy the header parameters (and comments) from.
+    :type run_file: str
+
+    :param new_run_file: the path to write the modified run file to. If not given, then the changes are written to
+     ``run_file``.
+    :type new_run_file: str
+
+    :param start_date: first date to include in the list of files. See above for what happens if this is omitted and
+     for allowed formats.
+
+    :param end_date: last date (inclusive) to include in the list of files. See above for what happens if this is
+     omitted and for allowed formats.
+
+    :param start_run: first run number to include in the list of files. See above for what happens if this is omitted.
+    :type start_run: int or str
+
+    :param end_run: last run number (inclusive) to include in the list of files. See above for what happens if this is
+     omitted.
+    :type end_run: int or str
+
+    :param slice_dir: directory to look for the slice_num run directories, i.e subdirectories named YYMMDD.R. Files *must*
+     be in the proper organization (YYMMDD.R/scan/<slice_num files>). If this is not given, then the directory from the
+     run file will be used. If that directory is relative, it will be interpreted as relative to the location of the
+     run file.
+    :type slice_dir: str
+
+    :param scantype: which scan type (Solar, Cell, etc) to include in the list.
+    :type scantype: str
+
+    :return: none
+    """
+    start_date, end_date, start_run, end_run, slice_dir = _parse_add_slice_info_inputs(run_file=run_file, start_date=start_date,
+                                                                                       end_date=end_date, start_run=start_run,
+                                                                                       end_run=end_run, slice_dir=slice_dir)
+    # Copy everything but the input files over to the new run file
+    runutils.modify_i2s_input_params(filename=run_file, new_file=new_run_file, include_input_files=False)
+    with open(new_run_file, 'a') as fobj:
+        # Just make sure we start on a new line - a blank line shouldn't hurt
+        fobj.write('\n')
+        for date, run, slice_num in _iter_runs(slice_dir=slice_dir, start_date=start_date, end_date=end_date,
+                                               start_run=start_run, end_run=end_run, scantype=scantype):
+            year = date.strftime('%Y')
+            month = date.strftime('%m')
+            day = date.strftime('%d')
+            fobj.write('{yr} {mo} {day} {run} {slice_num}\n'.format(yr=year, mo=month, day=day, run=run,
+                                                                    slice_num=slice_num))
+
+
+def _parse_add_slice_info_inputs(run_file, start_date, end_date, start_run, end_run, slice_dir):
+    def parse_datestr(datestr, input_name):
+        if len(datestr) == 8:
+            return dt.datetime.strptime(datestr, '%Y%m%d')
+        elif len(datestr) == 6:
+            return dt.datetime.strptime(datestr, '%y%m%d')
+        else:
+            raise ValueError('{} must be in YYMMDD or YYYYMMDD format'.format(input_name))
+
+    def parse_date_input(date_in, input_name):
+        if not isinstance(date_in, str):
+            try:
+                date_in.strftime('%y%m%d')
+                date_in + dt.timedelta(days=1)
+            except (AttributeError, TypeError):
+                raise TypeError('{} is not a string and does not have an "strftime" method or cannot be added to a '
+                                'timedelta'.format(input_name))
+            else:
+                return date_in, None
+        else:
+            if '-' in date_in:
+                raise ValueError('{} cannot contain dashes. Acceptable string formats are YYMMDD or YYYYMMDD.')
+            ndots = date_in.count('.')
+            if ndots == 1:
+                date_str, run_str = date_in.split('.')
+                try:
+                    run_num = int(run_str)
+                except ValueError:
+                    raise ValueError('Cannot interpret run part of {} ({}) as an integer'.format(input_name, run_str))
+
+            elif ndots == 0:
+                date_str = date_in
+                run_num = None
+            else:
+                raise ValueError('{} cannot have > 1 period in it'.format(input_name))
+
+            date_in = parse_datestr(date_str, input_name)
+            return date_in, run_num
+
+    def finalize_run_num(run, run_from_date, start_or_end):
+        if run is not None and run_from_date is not None:
+            raise TypeError('Cannot include a run number as part of the {se}_date and give {se}_run, only one may be '
+                            'given.'.format(se=start_or_end))
+
+        if run is None:
+            run = run_from_date
+
+        if run is not None:
+            try:
+                run = int(run)
+            except ValueError:
+                raise ValueError('Cannot interpret {}_run as an integer'.format(start_or_end))
+
+            if run < 1:
+                raise ValueError('{}_run cannot be < 1'.format(start_or_end))
+
+        return run
+
+    if slice_dir is None:
+        run_params = runutils.read_i2s_input_params(run_file)
+        slice_dir = run_params[1]
+        if not os.path.isabs(slice_dir):
+            slice_dir = os.path.join(os.path.dirname(run_file), slice_dir)
+
+    # Check if start/end date contain run numbers, also check their format
+    start_date, run_from_start_date = parse_date_input(start_date, 'start_date')
+    end_date, run_from_end_date = parse_date_input(end_date, 'end_date')
+    start_run = finalize_run_num(start_run, run_from_start_date, 'start')
+    end_run = finalize_run_num(end_run, run_from_end_date, 'end')
+
+    # if any of these are None, we'll need to list all the run directories to figure out their values
+    if any(v is None for v in [start_date, end_date, start_run, end_run]):
+        run_dirs = glob(os.path.join(slice_dir, '*'))
+        run_dates = dict()
+        for fname in run_dirs:
+            fname = os.path.basename(fname.rstrip(os.sep))
+            date_str, run_str = fname.split('.')
+            key = dt.datetime.strptime('%y%m%d', date_str)
+            if key not in run_dates:
+                run_dates[key] = []
+            run_dates[key].append(int(run_str))
+
+        if start_date is None:
+            start_date = min(run_dates.keys())
+        if end_date is None:
+            end_date = max(run_dates.keys())
+        if start_run is None:
+            start_run = min(run_dates[start_date])
+        if end_run is None:
+            end_run = max(run_dates[end_date])
+
+    return start_date, end_date, start_run, end_run, slice_dir
+
+
+def _iter_runs(slice_dir, start_date, end_date, start_run, end_run, scantype='Solar'):
+    curr_date = start_date
+    while curr_date <= end_date:
+        for run in range(start_run, end_run+1):
+            curr_dir = os.path.join(slice_dir, '{}.{}'.format(curr_date.strftime('%y%m%d'), run))
+            ifs_log_file = os.path.join(slice_dir, 'IFSretr.log')
+            if not os.path.exists(ifs_log_file):
+                logger.warning('Cannot add data from {}, no IFSretr.log file'.format(curr_dir))
+            with open(ifs_log_file, 'r') as robj:
+                in_scan = False
+                for line in robj:
+                    # each line will be date: status. "date" includes colons, so split on the last colon
+                    status = line.split(':')[-1].strip()
+                    if in_scan:
+                        if status == 'Request Completed':
+                            in_scan = False
+
+                        slice_num = re.search(r'(?<=b)\d+(?=\.0)')
+                        if slice_num is None:
+                            raise NotImplementedError('Line inside a scan does not include a slice number! Line was: '
+                                                      '{}'.format(line))
+                        slice_num = slice_num.group()
+                        yield curr_date, run, slice_num
+        curr_date += dt.timedelta(days=1)
 
 
 def link_i2s_input_files(cfg_file, overwrite=False, clean_links=False, clean_spectra=False):
@@ -863,6 +1081,10 @@ def parse_make_i2s_runfile_args(parser):
     parser.add_argument('-s', '--save-dir', dest='run_file_save_dir',
                         help='Directory to write the new run files to. If not given, new files are saved to the same '
                              'directory as the file they are a copy of.')
+    parser.add_argument('-d', '--slice-dir',
+                        help='Directory containing slice run directories. If not given, then the one specified by the '
+                             'original run file is used. This is used to generate the list of runs at the bottom of a '
+                             'slice run file. With opus files, this has no effect.')
     parser.add_argument('-o', '--overwrite', action='store_true',
                         help='Overwrite input files if the destination file already exists.')
     parser.set_defaults(driver_fxn=make_i2s_run_files)

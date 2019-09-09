@@ -37,7 +37,7 @@ def finalize_target_dirs(target_dirs, dirs_list=None):
 
 
 def modify_i2s_input_params(filename, *args, new_file=None, last_header_param=_default_last_header_param,
-                            **infile_actions):
+                            include_input_files=True, **infile_actions):
     """
     Modify an I2S input file's common parameters. This cannot easily handle adding interferograms to process.
 
@@ -59,6 +59,14 @@ def modify_i2s_input_params(filename, *args, new_file=None, last_header_param=_d
     :param new_file: optional, if given, write the modified file to this path. If not given, overwrites the original
      files.
     :type new_file: str
+
+    :param last_header_param: the number of parameters in the header (before the list of slices or opus files). This
+     generally should not need to change unless using a non-standard version of I2S that expects more or fewer
+     parameters.
+    :type last_header_param: int
+
+    :param include_input_files: whether to keep the list of opus interferograms or slices at the end of the new file.
+    :type include_input_files: bool
 
     :param infile_actions: additional keyword arguments specifying changes to make to the existing runfiles. Allowed
      keywords are:
@@ -89,7 +97,9 @@ def modify_i2s_input_params(filename, *args, new_file=None, last_header_param=_d
                         trailing_space = re.search(r'\s*$', value).group()
                         value = i2s_params[param_num][subparam_num-1] + trailing_space
                     elif param_num > last_header_param:
-                        if 'chdir' in infile_actions:
+                        if not include_input_files:
+                            continue
+                        elif 'chdir' in infile_actions:
                             value = re.split(r'\s+', value, maxsplit=1)
                             if re.match(r'\s*\d{4}', value[0]):
                                 logger.info('Not removing opus file directory names in line "{}" because this looks '
