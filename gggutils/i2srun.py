@@ -71,6 +71,46 @@ def build_cfg_file(cfg_file, i2s_input_files, old_cfg_file=None):
     cfg.write()
 
 
+def update_cfg_run_files(cfg_file, i2s_run_files, keep_missing=False, new_cfg_file=None):
+    """
+    Update an existing config file so that all the site/dates use new run files
+
+    :param cfg_file: the config file to update
+    :type cfg_file: str
+
+    :param i2s_run_files: list of I2S run files that will replace existing run files in the config.
+    :type i2s_run_files: list(str)
+
+    :param keep_missing: by default, if a site/date in the config file no longer has a corresponding run file in the
+     given list of such files, it is removed from the config file. Set this keyword to ``True`` to keep such site/dates.
+    :type keep_missing: bool
+
+    :param new_cfg_file: a path to write the modified config file to. If not given, the original one is overwritten.
+    :type new_cfg_file: str
+
+    :return: none. Writes the updated config file.
+    """
+
+    cfg = load_config_file(cfg_file)
+    if new_cfg_file is not None:
+        cfg.filename = new_cfg_file
+
+    grouped_files = _group_i2s_input_files(i2s_run_files)
+    for site, site_dict in cfg['Sites'].items():
+        site_files = grouped_files[site]
+        for datestr in site_dict.sections:
+            if datestr not in site_files:
+                if keep_missing:
+                    logger.debug('{} does not have an input file in the new list, not updating'.format(datestr))
+                else:
+                    logger.info('{} does not have an input file anymore, removing'.format(datestr))
+                    site_dict.pop(datestr)
+            else:
+                site_dict[datestr]['i2s_input_file'] = site_files[datestr]
+
+    cfg.write()
+
+
 def load_config_file(cfg_file):
     """
     Load an I2S run config file, validating options and normalizing paths
@@ -816,7 +856,7 @@ def _group_i2s_input_files(input_files):
     :type input_files: list(str)
 
     :return: a two-level dictionary where the first level's keys are the site abbreviations and the second level's are
-     the YYYYMMDD date strings.
+     the xxYYYYMMDD date strings.
     :rtype: dict
     """
     group_dict = dict()
@@ -1111,6 +1151,21 @@ def parse_build_cfg_args(parser):
                              'have their values inserted in the new config file.')
 
     parser.set_defaults(driver_fxn=build_cfg_file)
+
+
+def parse_update_cfg_args(parser):
+    parser.description = 'Update an existing I2S bulk config file with new run file paths'
+    parser.add_argument('cfg_file', help='The config file to update')
+    parser.add_argument('i2s_input_files', nargs='+', help='All the I2S input files to create I2S runs for. Note that '
+                                                           'these files MUST include xxYYYYMMDD in the name, where xx '
+                                                           'is the site abbreviation and YYYYMMDD the year/month/day.')
+    parser.add_argument('-c', '--new-cfg-file', default=None,
+                        help='Path to save the updated config file as. If omitted, then the old one will be overwritten.')
+    parser.add_argument('-k', '--keep-missing', action='store_true',
+                        help='Keep site target dates in the config file even if they no longer have a run file in the '
+                             'list of files given.')
+
+    parser.set_defaults(driver_fxn=update_cfg_run_files)
 
 
 def parse_make_i2s_runfile_args(parser):
