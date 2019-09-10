@@ -150,6 +150,12 @@ def load_config_file(cfg_file):
     # Make relative paths relative to the config file
     cfg.walk(make_paths_abs)
 
+    # In the I2S setting section, replace "\\n" and "\\r" with "\n" and "\r" - i.e. undo the
+    # backslash escaping the configobj does. This is necessary because some of the i2s parameters
+    # need to have two lines.
+    for key, value in cfg['I2S'].items():
+        cfg['I2S'][key] = value.replace('\\n', '\n').replace('\\r', '\r')
+
     return cfg
 
 
@@ -1156,7 +1162,7 @@ def parse_build_cfg_args(parser):
 def parse_update_cfg_args(parser):
     parser.description = 'Update an existing I2S bulk config file with new run file paths'
     parser.add_argument('cfg_file', help='The config file to update')
-    parser.add_argument('i2s_input_files', nargs='+', help='All the I2S input files to create I2S runs for. Note that '
+    parser.add_argument('i2s_run_files', nargs='+', help='All the I2S input files to create I2S runs for. Note that '
                                                            'these files MUST include xxYYYYMMDD in the name, where xx '
                                                            'is the site abbreviation and YYYYMMDD the year/month/day.')
     parser.add_argument('-c', '--new-cfg-file', default=None,
@@ -1241,6 +1247,9 @@ def parse_i2s_args(parser):
 
     build_cfg = subp.add_parser('build-cfg', help='Build the config file to run I2S in bulk.')
     parse_build_cfg_args(build_cfg)
+
+    update_cfg = subp.add_parser('up-cfg', help='Update the config file with new run files.')
+    parse_update_cfg_args(update_cfg)
 
     mod_runfiles = subp.add_parser('mod-runs', help='Modify a batch of run files')
     parse_mod_run_files_args(mod_runfiles)
