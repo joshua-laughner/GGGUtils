@@ -10,6 +10,10 @@ class I2SDataException(I2SException):
     pass
 
 
+class I2SSetupException(I2SException):
+    pass
+
+
 class SiteDateException(Exception):
     pass
 

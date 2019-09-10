@@ -9,7 +9,7 @@ import tempfile
 from . import _run_cols_for_full, _run_cols_for_slices
 from . import exceptions
 
-_default_last_header_param = 27
+_default_last_header_param = 28
 logger = getLogger('runutils')
 
 
@@ -189,6 +189,8 @@ def read_i2s_input_params(infile, last_header=_default_last_header_param):
 
 def i2s_use_slices(infile):
     _, igrams = read_i2s_input_params(infile)
+    if len(igrams) == 0:
+        raise exceptions.I2SFormatException('I2S intput file ({}) has no igrams listed, cannot tell if uses slices or full igrams'.format(infile))
     n = len(igrams[0])
     if n == _run_cols_for_slices:
         return True

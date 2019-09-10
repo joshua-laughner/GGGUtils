@@ -136,7 +136,7 @@ def make_i2s_run_files(dirs_list, run_files, run_file_save_dir, overwrite=False,
         # a file, then copy one to be that file.
         for datestr, runfile in run_file_dict.items():
             if runfile is None:
-                _make_new_i2s_run_file(datestr=datestr, run_files=run_file_dict, last_key_with_file=key_with_file,
+                _make_new_i2s_run_file(datestr=datestr, run_files=run_file_dict,
                                        save_dir=run_file_save_dir, overwrite=overwrite, slice_dir=slice_dir)
             else:
                 key_with_file = datestr
@@ -158,16 +158,40 @@ def _list_existing_i2s_run_files(target_date_dict, run_files):
     return run_file_dict
 
 
-def _make_new_i2s_run_file(datestr, run_files, last_key_with_file, save_dir, overwrite=False, slice_dir=None,
+def _make_new_i2s_run_file(datestr, run_files, save_dir, overwrite=False, slice_dir=None,
                            file_type=None):
-    if last_key_with_file is None:
+    
+    target_date = dt.datetime.strptime(datestr[2:], '%Y%m%d')
+    def closest_in_time(k):
+        d = dt.datetime.strptime(k[2:], '%Y%m%d')
+        return abs(d - target_date)
+
+    keys_by_time = [k for k in sorted(run_files.keys(), key=closest_in_time) if run_files[k] is not None]
+
+    if len(keys_by_time) == 0:
         logger.warning('Cannot make a run file for {}: no existing files for that site'.format(datestr))
         return
-    old_file = run_files[last_key_with_file]
+
+    if file_type is None:
+        found_key = False
+        for key in keys_by_time:
+            try:
+                uses_slices = runutils.i2s_use_slices(run_files[key])
+            except exceptions.I2SFormatException:
+                pass
+            else:
+                found_key = True
+                break
+
+        file_type = 'slice' if uses_slices else 'opus'
+        if not found_key:
+            raise exceptions.I2SFormatException('None of the available run files lists any igrams, cannot determine file type')
+
+    old_file = run_files[key]
     new_base_file = os.path.basename(old_file)
     new_base_file = re.sub(r'\w\w\d{8}', datestr, new_base_file)
     if save_dir is None:
-        save_dir = os.path.dirname(run_files[last_key_with_file])
+        save_dir = os.path.dirname(old_file)
     new_file = os.path.join(save_dir, new_base_file)
     if os.path.exists(new_file):
         if not overwrite:
@@ -186,11 +210,12 @@ def _make_new_i2s_run_file(datestr, run_files, last_key_with_file, save_dir, ove
         if not os.path.isabs(slice_dir):
             slice_dir = os.path.join(os.path.dirname(old_file), slice_dir)
 
-    if file_type is None:
-        file_type = 'slice' if runutils.i2s_use_slices(old_file) else 'opus'
-
     if file_type == 'slice':
-        add_slice_info_to_i2s_run_file(old_file, new_run_file=new_file, start_date=datestr, slice_dir=slice_dir)
+        try:
+            add_slice_info_to_i2s_run_file(old_file, new_run_file=new_file, start_date=datestr[2:], end_date=datestr[2:],
+                                           slice_dir=slice_dir)
+        except exceptions.I2SSetupException as err:
+            logger.warning(err.args[0])
     elif file_type == 'opus':
         # At the moment, I haven't implemented a way to figure out the input file list with opus format. So just copy
         # everything but the list of files.
@@ -206,7 +231,7 @@ def copy_i2s_run_files_from_target_dirs(dirs_list, save_dir, interactive='choice
                                                              full_datestr=True, key_by_basename=False)
     for site, site_dict in avail_target_dates.items():
         for site_date, revision in site_dict.items():
-            full_site_dir = os.path.join(site, site_date, revision)
+            full_site_dir = os.path.join(site, revision, site_date)
             site_input_files = glob(os.path.join(full_site_dir, '*.in'))
 
             if len(site_input_files) == 0:
@@ -215,6 +240,7 @@ def copy_i2s_run_files_from_target_dirs(dirs_list, save_dir, interactive='choice
                     input()
                 else:
                     logger.warning('No input files found in {}'.format(full_site_dir))
+                continue
             elif len(site_input_files) == 1 and interactive != 'all':
                 input_file = site_input_files[0]
             elif interactive == 'none':
@@ -261,9 +287,6 @@ def add_slice_info_to_i2s_run_file(run_file, new_run_file=None, start_date=None,
     The range of data included depends on what start/end dates and runs are specified:
 
         * If no start or end date are given, then all data in the slices directory will be added.
-        * If only a start date is given, all data from that day will be added. If start or ending run numbers are given,
-          then only runs within that range are added. (Omitted one of the run numbers removes that limit, e.g. only
-          specifying a start run will include all runs >= that number.)
         * If both a start and end date are given, then only data between those dates (inclusive) are added.
         * If both a start and end date are given, *and* start and/or end run numbers are given, then all data between
           start date + start run and end date + end run will be added, e.g. if the dates where 2019-01-01 to 2019-01-03
@@ -319,13 +342,14 @@ def add_slice_info_to_i2s_run_file(run_file, new_run_file=None, start_date=None,
     with open(new_run_file, 'a') as fobj:
         # Just make sure we start on a new line - a blank line shouldn't hurt
         fobj.write('\n')
-        for date, run, slice_num in _iter_runs(slice_dir=slice_dir, start_date=start_date, end_date=end_date,
+        for date, run, slice_nums in _iter_runs(slice_dir=slice_dir, start_date=start_date, end_date=end_date,
                                                start_run=start_run, end_run=end_run, scantype=scantype):
-            year = date.strftime('%Y')
-            month = date.strftime('%m')
-            day = date.strftime('%d')
+            # just get the integer values, don't need 0 padding (so no need to use strftime)
+            year = date.year
+            month = date.month
+            day = date.day
             fobj.write('{yr} {mo} {day} {run} {slice_num}\n'.format(yr=year, mo=month, day=day, run=run,
-                                                                    slice_num=slice_num))
+                                                                    slice_num=slice_nums[0]))
 
 
 def _parse_add_slice_info_inputs(run_file, start_date, end_date, start_run, end_run, slice_dir):
@@ -338,6 +362,8 @@ def _parse_add_slice_info_inputs(run_file, start_date, end_date, start_run, end_
             raise ValueError('{} must be in YYMMDD or YYYYMMDD format'.format(input_name))
 
     def parse_date_input(date_in, input_name):
+        if date_in is None:
+            return None, None
         if not isinstance(date_in, str):
             try:
                 date_in.strftime('%y%m%d')
@@ -402,18 +428,29 @@ def _parse_add_slice_info_inputs(run_file, start_date, end_date, start_run, end_
     if any(v is None for v in [start_date, end_date, start_run, end_run]):
         run_dirs = glob(os.path.join(slice_dir, '*'))
         run_dates = dict()
-        for fname in run_dirs:
-            fname = os.path.basename(fname.rstrip(os.sep))
+        for full_fname in run_dirs:
+            fname = os.path.basename(full_fname.rstrip(os.sep))
+            if not re.match(r'\d{6}\.\d+', fname):
+                logger.debug('Skipping {} as it is not a run directory'.format(full_fname))
+                continue
             date_str, run_str = fname.split('.')
-            key = dt.datetime.strptime('%y%m%d', date_str)
+            key = dt.datetime.strptime(date_str, '%y%m%d')
             if key not in run_dates:
                 run_dates[key] = []
             run_dates[key].append(int(run_str))
 
+
+        
         if start_date is None:
             start_date = min(run_dates.keys())
         if end_date is None:
             end_date = max(run_dates.keys())
+        
+        # Limit the start/end dates to dates that actually exists
+        run_dates = {k: v for k, v in run_dates.items() if start_date <= k <= end_date}
+        if len(run_dates) == 0:
+            raise exceptions.I2SSetupException('No data for date range {} to {}'.format(start_date.date(), end_date.date()))
+        
         if start_run is None:
             start_run = min(run_dates[start_date])
         if end_run is None:
@@ -427,24 +464,36 @@ def _iter_runs(slice_dir, start_date, end_date, start_run, end_run, scantype='So
     while curr_date <= end_date:
         for run in range(start_run, end_run+1):
             curr_dir = os.path.join(slice_dir, '{}.{}'.format(curr_date.strftime('%y%m%d'), run))
-            ifs_log_file = os.path.join(slice_dir, 'IFSretr.log')
+            ifs_log_file = os.path.join(curr_dir, 'IFSretr.log')
             if not os.path.exists(ifs_log_file):
                 logger.warning('Cannot add data from {}, no IFSretr.log file'.format(curr_dir))
             with open(ifs_log_file, 'r') as robj:
                 in_scan = False
                 for line in robj:
-                    # each line will be date: status. "date" includes colons, so split on the last colon
-                    status = line.split(':')[-1].strip()
+                    status = line.split(':')[3:]
+                    # the lines have the form "Mon Apr 23 17:37:59 2018: Solar". We want everything after the
+                    # third colon as the status, so we get that, but have to paste it back together if there
+                    # were colons in the status itself as in "Mon Apr 23 17:38:40 2018: Retrieving b3621010.0: 1 sec"
+                    status = ':'.join(status).strip()
                     if in_scan:
-                        if status == 'Request Completed':
+                        if 'Request Completed' == status:
                             in_scan = False
-
-                        slice_num = re.search(r'(?<=b)\d+(?=\.0)')
-                        if slice_num is None:
-                            raise NotImplementedError('Line inside a scan does not include a slice number! Line was: '
-                                                      '{}'.format(line))
-                        slice_num = slice_num.group()
-                        yield curr_date, run, slice_num
+                            yield curr_date, run, slice_num_list
+                        else:
+                            slice_num = re.search(r'(?<=b)\d+(?=\.0)', status)
+                            if slice_num is None:
+                                logger.warning('Run directory {}: Line inside a scan does not include a slice number! Line was: {}'
+                                               .format(curr_dir, line))
+                                # something odd happened in this run. We do not want to include it in the list, so reset
+                                # in_scan without yielding
+                                in_scan = False
+                                continue
+                            slice_num = slice_num.group()
+                            slice_num_list.append(slice_num)
+                    else:
+                        if scantype == status:
+                            in_scan = True
+                            slice_num_list = []
         curr_date += dt.timedelta(days=1)
 
 
