@@ -697,16 +697,25 @@ def _link_slices(cfg, site, datestr, i2s_opts, overwrite=False, clean_links=Fals
     # If the slices need organized, then we'll have to link individual slice files into the right directories. If not,
     # we can just link the preexisting directories
     _, run_lines = runutils.read_i2s_input_params(i2s_input_file)
+    last_run_date = None
     for idx, line in enumerate(run_lines):
         run_date = dt.datetime(int(line['year']), int(line['month']), int(line['day'])).strftime('%y%m%d')
         slice_run_dir = '{}.{}'.format(run_date, line['run'])
         if not slices_need_org:
-            _make_link(os.path.join(src_igm_dir, slice_run_dir), os.path.join(igms_dir, slice_run_dir),
-                       overwrite=overwrite, target_is_directory=True)  # not entirely sure the difference using target_is_directory
+            if run_date != last_run_date:
+                # This check avoids lots of debug messages about not overwriting an existing symlink because typically
+                # all or most of the lines in a run file will be for the same day (in target obs) and even outside
+                # target obs. there will be lots with the same date
+
+                # not entirely sure the difference using target_is_directory
+                _make_link(os.path.join(src_igm_dir, slice_run_dir), os.path.join(igms_dir, slice_run_dir),
+                           overwrite=overwrite, target_is_directory=True)
         else:
             logger.debug('Setting up correct directory structure for linked slices')
             _link_slices_needs_org(slice_files=slice_files, run_lines=run_lines, run_lines_index=idx,
                                    dest_run_dir=os.path.join(igms_dir, slice_run_dir), overwrite=overwrite)
+
+        last_run_date = run_date
 
 
 def _link_slices_needs_org(slice_files, run_lines, run_lines_index, dest_run_dir, overwrite):
@@ -836,7 +845,8 @@ def _link_common(cfg, site, datestr, i2s_opts, link_subdir, input_file_basename,
 
 
 def _make_link(src, dst, overwrite=False, **kwargs):
-    if os.path.exists(dst):
+    # need to use lexists, not exists because the latter will return False if dst is a broken symlink
+    if os.path.lexists(dst):
         if overwrite:
             logger.debug('Overwriting existing symlink: {}'.format(dst))
             os.remove(dst)
