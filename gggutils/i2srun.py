@@ -543,7 +543,7 @@ def _iter_runs(slice_dir, start_date, end_date, start_run, end_run, scantype='So
         curr_date += dt.timedelta(days=1)
 
 
-def link_i2s_input_files(cfg_file, overwrite=False, clean_links=False, clean_spectra=False):
+def link_i2s_input_files(cfg_file, overwrite=False, clean_links=False, clean_spectra=False, ignore_missing_igms=False):
     """
     Link all the input interferograms/slices and the required input files for I2S into the batch run directory
 
@@ -559,6 +559,12 @@ def link_i2s_input_files(cfg_file, overwrite=False, clean_links=False, clean_spe
 
     :param clean_spectra: whether or not to delete the existing spectra output directory to make way for new spectra.
     :type clean_spectra: bool
+
+    :param ignore_missing_igms: if OPUS files listed in the run file are missing, the default behavior is to raise an
+     error and stop executing. Set this parameter to ``True`` to ignore that error and continue linking other days.
+     Any day that is missing files will not have any files linked. Currently, this has no effect on sites that provide
+     slices.
+    :type ignore_missing_igms: bool
 
     :return: none, links files at the paths specified in the config
     """
@@ -579,14 +585,14 @@ def link_i2s_input_files(cfg_file, overwrite=False, clean_links=False, clean_spe
             if not uses_slices:
                 logger.debug('Linking full igrams for {}'.format(datesect))
                 _link_igms(cfg=cfg, site=sect, datestr=datesect, i2s_opts=cfg['I2S'], overwrite=overwrite,
-                           clean_links=clean_links, clean_spectra=clean_spectra)
+                           clean_links=clean_links, clean_spectra=clean_spectra, ignore_missing=ignore_missing_igms)
             else:
                 logger.debug('Linking slices for {}'.format(datesect))
                 _link_slices(cfg=cfg, site=sect, datestr=datesect, i2s_opts=cfg['I2S'], overwrite=overwrite,
                              clean_links=clean_links, clean_spectra=clean_spectra)
 
 
-def _link_igms(cfg, site, datestr, i2s_opts, overwrite, clean_links, clean_spectra):
+def _link_igms(cfg, site, datestr, i2s_opts, overwrite, clean_links, clean_spectra, ignore_missing):
     """
     Link full interferogram files to the appropriate site/date run directory; set up the flimit and opus-i2s.in files
 
@@ -621,15 +627,30 @@ def _link_igms(cfg, site, datestr, i2s_opts, overwrite, clean_links, clean_spect
                                                          link_subdir='igms', input_file_basename='opus-i2s.in',
                                                          clean_links=clean_links, clean_spectra=clean_spectra)
 
-    # Read the input file and link all the listed files into the igms directory
+    # Read the input file and link all the listed files into the igms directory.  Delay linking until we're sure that
+    # all required igrams are present.
     _, run_lines = runutils.read_i2s_input_params(i2s_input_file)
+    link_dict = dict()
+    files_missing = False
     for i, run_dict in enumerate(run_lines, start=1):
         runf = run_dict['opus_file']
         src_file = os.path.join(src_igm_dir, runf)
         if not os.path.isfile(src_file):
-            raise exceptions.I2SDataException('Expected source file {src} (run line #{lnum} in {infile}) does not exist'
-                                              .format(src=src_file, lnum=i, infile=i2s_input_file))
-        _make_link(src_file, os.path.join(igms_dir, runf), overwrite=overwrite)
+            files_missing = True
+            msg = 'Expected source file {src} (run line #{lnum} in {infile}) does not exist'.format(
+                src=src_file, lnum=i, infile=i2s_input_file
+            )
+            if ignore_missing:
+                logger.warning(msg)
+            else:
+                raise exceptions.I2SDataException(msg)
+        link_dict[src_file] = os.path.join(igms_dir, runf)
+
+    if not files_missing:
+        for src, dst in link_dict.items():
+            _make_link(src, dst, overwrite=overwrite)
+    else:
+        logger.warning('{} had 1 or more igrams missing. It will probably not run for I2S.'.format(datestr))
 
 
 def _link_slices(cfg, site, datestr, i2s_opts, overwrite=False, clean_links=False, clean_spectra=False):
@@ -1225,6 +1246,9 @@ def parse_link_i2s_args(parser):
     parser.description = 'Link all the input files needed to run I2S in bulk'
     parser.add_argument('cfg_file', help='The config file to use to find the files to link')
     parser.add_argument('-o', '--overwrite', action='store_true', help='Overwrite existing symbolic links')
+    parser.add_argument('-i', '--ignore_missing-igms', action='store_true',
+                        help='Ignore errors caused when a day is missing one or more interferograms listed in the '
+                             'I2S run file. Currently only has an effect when using OPUS-type files.')
     parser.add_argument('--clean-links', action='store_true', help='Clean up (delete) existing symbolic links')
     parser.add_argument('--clean-spectra', action='store_true', help='Clean up (delete) the existing spectra directory')
     parser.set_defaults(driver_fxn=link_i2s_input_files)
