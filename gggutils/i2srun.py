@@ -159,8 +159,34 @@ def load_config_file(cfg_file):
     return cfg
 
 
-def make_i2s_run_files(dirs_list, run_files, run_file_save_dir, overwrite=False, slice_dir=None):
+def make_i2s_run_files(dirs_list, run_files, run_file_save_dir=None, overwrite=False, slice_dir=None):
+    """
+    Create new I2S run files using other files as templates
+    
+    :param dirs_list: file containing a list of target directories to make run files for, one per line. These are 
+     directories that themselves have subdirectories of the xxYYYYMMDD.
+    :type dirs_list: str
+     
+    :param run_files: a list of existing I2S run files. These are the files that will be used as templates to make files
+     for dates in the directories listed in ``dirs_list``; the one closest by date to each of the missing directories 
+     will be used as the template for each date missing a run file.
+    :type run_files: list(str)
+    
+    :param run_file_save_dir: location to save the new run files to. If it is ``None``, they will be stored alongside
+     their templates.
+    :type run_file_save_dir: str
+      
+    :param overwrite: controls what happens if the new run file created would overwrite and existing file. If ``False``,
+     the existing file is left alone.
+    :type overwrite: bool
+    
+    :param slice_dir: used when creating a new file that uses slices to try to populate the list of slices at the bottom
+     of the run file. If not given, then the rules of :func:`add_slice_info_to_i2s_run_file` are followed to guess where
+     the slices might be; however, this will almost always need to be specified.
+    :type slice_dir: str
 
+    :return: none
+    """
     avail_target_dates = target_utils.build_target_dirs_dict(target_dirs=[], dirs_list=dirs_list,
                                                              flat=True, full_datestr=True)
     for site, site_dict in avail_target_dates.items():
@@ -169,14 +195,6 @@ def make_i2s_run_files(dirs_list, run_files, run_file_save_dir, overwrite=False,
             continue
         run_file_dict = _list_existing_i2s_run_files(site_dict, run_files=run_files)
 
-        # Find the first date string key that has a file associated with it. If there are any dates before that missing
-        # a file, we'll use that file to fill in.
-        key_with_file = None
-        for datestr, runfile in run_file_dict.items():
-            if runfile is not None:
-                key_with_file = datestr
-                break
-
         # Now for each target date, if it has a file, reset the last key found to have a file to that, so that we use
         # the most recent file before a missing date as the template if we need to make a new input file. If there's not
         # a file, then copy one to be that file.
@@ -184,11 +202,22 @@ def make_i2s_run_files(dirs_list, run_files, run_file_save_dir, overwrite=False,
             if runfile is None:
                 _make_new_i2s_run_file(datestr=datestr, run_files=run_file_dict,
                                        save_dir=run_file_save_dir, overwrite=overwrite, slice_dir=slice_dir)
-            else:
-                key_with_file = datestr
 
 
 def _list_existing_i2s_run_files(target_date_dict, run_files):
+    """
+    Make a dictionary indicating which target days already have run files.
+
+    :param target_date_dict: a dictionary with full date strings (xxYYYYMMDD) as keys. The values are not used.
+    :type target_date_dict: dict
+
+    :param run_files: the list of run files available to be matched with target days
+    :type run_files: list(str)
+
+    :return: a ordered dictionary with the same date strings as keys as ``target_date_dict`` and the corresponding run
+     file as the value, or ``None`` if no run file is available.
+    :rtype: :class:`collections.OrderedDict`
+    """
     target_dates = runutils.sort_datestr(target_date_dict.keys())
     # Get the site abbreviation from the target dates. Assume its always the first two characters of the date strings.
     site_abbrev = set(td[:2] for td in target_dates)
@@ -204,10 +233,44 @@ def _list_existing_i2s_run_files(target_date_dict, run_files):
     return run_file_dict
 
 
-def _make_new_i2s_run_file(datestr, run_files, save_dir, overwrite=False, slice_dir=None,
+def _make_new_i2s_run_file(datestr, run_files, save_dir=None, overwrite=False, slice_dir=None,
                            file_type=None):
-    
+    """
+    Create a new I2S run file using an existing run file as a template.
+
+    This will find the run file closest by date to the requested date string, copy the header parameters from it into
+    the new file, and either try to fill in the list of slices (if a slice file) or leave the list of opus files blank,
+    if an opus-type file.
+
+    :param datestr: the date string that we are creating a file for, in xxYYYYMMDD format.
+    :type datestr: str
+
+    :param run_files: list of available run files to use as templates
+    :type run_files: list(str)
+
+    :param save_dir: the directory to save the new run files to. If ``None``, then the new file will be saved in the
+     same directory as the template it was created from.
+    :type save_dir: str or None
+
+    :param overwrite: if ``False``, then the new run file will not be created if doing so will overwrite an existing
+     file. Set to ``True`` to change that behavior.
+    :type overwrite: bool
+
+    :param slice_dir: directory to search for slice files to populate the list of slices in a slice-type run file. This
+     must be the directory that contains the slice date folders, named YYMMDD.R. If not given, the rules in
+     :func:`add_slice_info_to_i2s_run_file` are used to try to find the slices, but this will usually need to be
+     specified.
+    :type slice_dir: str
+
+    :param file_type: set to "slice" or "opus" to force this to treat the new files as that type; for slice-type files,
+     it will populate the list of slices to run, for opus-type files, it will leave that list blank. If not given then
+     this function tries to infer which file type the template is.
+    :type file_type: str or None
+
+    :return: none, creates new run files.
+    """
     target_date = dt.datetime.strptime(datestr[2:], '%Y%m%d')
+    
     def closest_in_time(k):
         d = dt.datetime.strptime(k[2:], '%Y%m%d')
         return abs(d - target_date)
@@ -273,6 +336,37 @@ def _make_new_i2s_run_file(datestr, run_files, save_dir, overwrite=False, slice_
 
 
 def copy_i2s_run_files_from_target_dirs(dirs_list, save_dir, interactive='choice', overwrite=None, prefix=None):
+    """
+    Copy I2S run files from disperate target directories into one collected directory.
+
+    All I2S run files (*.in files) will be copied to the save directory and named opus-i2s.xxYYYYMMDD.in or
+    slice-i2s.xxYYYYMMDD.in, depending on whether they are opus- or slice- type files.
+
+    :param dirs_list: file containing a list of target directories to make run files for, one per line. These are
+     directories that themselves have subdirectories of the xxYYYYMMDD.
+    :type dirs_list: str
+
+    :param save_dir: directory to save the run files to.
+    :type save_dir: str
+
+    :param interactive: controls what level of interactivity this has in normal operation. Options are "choice", "all",
+     or "none". If "choice", then whenever multiple input files (files matching "*.in") are found, you will be prompted
+     to choose which one to copy. If "all", then you will always be prompted, even if there is only 1 or 0 files. If
+     "none", then you will never be prompted, but an error is raised if multiple .in files are found.
+    :type interactive: str
+
+    :param overwrite: controls what happens if the file already exists where it is being copied to. If ``None``, then
+     you will be prompted whether or not to overwrite. Otherwise, set to ``True`` to ``False`` to always or never
+     overwrite, respectively.
+    :type overwrite: bool or None
+
+    :param prefix: Prefix to use instead of "opus-i2s" or "slice-i2s" at the beginning of the file. May set to one of
+     those to force the files to use the same prefix regardless of whether they are opus- or slice- type. If ``None``,
+     then the prefix is automatically chosen based on the file type.
+    :type prefix: str or None.
+
+    :return: none, copies files
+    """
     avail_target_dates = target_utils.build_target_dirs_dict([], dirs_list=dirs_list, flat=True,
                                                              full_datestr=True, key_by_basename=False)
     for site, site_dict in avail_target_dates.items():
@@ -299,7 +393,7 @@ def copy_i2s_run_files_from_target_dirs(dirs_list, save_dir, interactive='choice
                                                       input_file_basenames, returntype='index')
                 if file_ind is None:
                     user_ans = uielements.user_input_list('\nQuit or skip to the next site/date?',
-                                                              ['Skip', 'Quit'], currentvalue='Skip')
+                                                          ['Skip', 'Quit'], currentvalue='Skip')
                     if user_ans == 'Quit':
                         return
                     else:
@@ -388,8 +482,8 @@ def add_slice_info_to_i2s_run_file(run_file, new_run_file=None, start_date=None,
     with open(new_run_file, 'a') as fobj:
         # Just make sure we start on a new line - a blank line shouldn't hurt
         fobj.write('\n')
-        for date, run, slice_nums in _iter_runs(slice_dir=slice_dir, start_date=start_date, end_date=end_date,
-                                               start_run=start_run, end_run=end_run, scantype=scantype):
+        for date, run, slice_nums in _iter_slice_runs(slice_dir=slice_dir, start_date=start_date, end_date=end_date,
+                                                      start_run=start_run, end_run=end_run, scantype=scantype):
             # just get the integer values, don't need 0 padding (so no need to use strftime)
             year = date.year
             month = date.month
@@ -399,6 +493,12 @@ def add_slice_info_to_i2s_run_file(run_file, new_run_file=None, start_date=None,
 
 
 def _parse_add_slice_info_inputs(run_file, start_date, end_date, start_run, end_run, slice_dir):
+    """
+    Parse inputs to :func:`add_slice_info_to_i2s_run_file`.
+
+    Carries out all the input rules for :func:`add_slice_info_to_i2s_run_file` (i.e. choosing start/end dates/runs if
+     not given). Returns the concrete values these should have.
+    """
     def parse_datestr(datestr, input_name):
         if len(datestr) == 8:
             return dt.datetime.strptime(datestr, '%Y%m%d')
@@ -485,8 +585,6 @@ def _parse_add_slice_info_inputs(run_file, start_date, end_date, start_run, end_
                 run_dates[key] = []
             run_dates[key].append(int(run_str))
 
-
-        
         if start_date is None:
             start_date = min(run_dates.keys())
         if end_date is None:
@@ -505,7 +603,33 @@ def _parse_add_slice_info_inputs(run_file, start_date, end_date, start_run, end_
     return start_date, end_date, start_run, end_run, slice_dir
 
 
-def _iter_runs(slice_dir, start_date, end_date, start_run, end_run, scantype='Solar'):
+def _iter_slice_runs(slice_dir, start_date, end_date, start_run, end_run, scantype='Solar'):
+    """
+    Iterate over the runs that need to be written to the bottom of a slice-type I2S input file.
+
+    :param slice_dir: the directory containing the slice run dirs, i.e. the directories named YYMMDD.R.
+    :type slice_dir: str
+
+    :param start_date: the first date to include in the list of runs
+    :type start_date: datetime-like
+
+    :param end_date: the last date to include in the list of runs (inclusive)
+    :type end_date: datetime-like
+
+    :param start_run: the first run to include on the start date.
+    :type start_run: int
+
+    :param end_run: the last run to include on the end date (inclusive).
+    :type end_run: int
+
+    :param scantype: the type of scan to include. E.g. "Solar", "SolarInGaAs". Must match the scan type in the
+     IFSretr.log file.
+    :type scantype: str
+
+    :return: iterator that yields the date, run number, and list of slices that make up each scan. The list of slices
+     will be in order, and contain the slice number (i.e. for a slice "b123456789.0" the "123456789") as a string.
+    :rtype: :class:`datetime.datetime`, int, list(str)
+    """
     curr_date = start_date
     while curr_date <= end_date:
         for run in range(start_run, end_run+1):
@@ -845,6 +969,22 @@ def _link_common(cfg, site, datestr, i2s_opts, link_subdir, input_file_basename,
 
 
 def _make_link(src, dst, overwrite=False, **kwargs):
+    """
+    Make a single symbolic link, with extra checks if the link already exists.
+
+    :param src: the file that the link should point to.
+    :type src: str
+
+    :param dst: the link name
+    :type dst: str
+
+    :param overwrite: whether to replace an existing file to make the link. Use with care!
+    :type overwrite: bool
+
+    :param kwargs: additional keyword arguments to :func:`os.symlink`
+
+    :return: none
+    """
     # need to use lexists, not exists because the latter will return False if dst is a broken symlink
     if os.path.lexists(dst):
         if overwrite:
@@ -879,6 +1019,22 @@ def _group_uses_slices(site_dict):
 
 
 def _date_subdir(cfg, site, datestr):
+    """
+    Return the path to the directory where a day's I2S will be run.
+
+    :param cfg: the configuration object from reading the I2S bulk config file.
+    :type cfg: :class:`configobj.ConfigObj`
+
+    :param site: the site abbreviaton
+    :type site: str
+
+    :param datestr: the string defining which date the run directory is for.  May include the site abbreviation
+     (xxYYYYMMDD) or not (YYYYMMDD).
+    :type datestr: str
+
+    :return: the path to the run directory
+    :rtype: str
+    """
     run_top_dir = cfg['Run']['run_top_dir']
     site_sect = cfg['Sites'][site]
     datestr = _find_site_datekey(site_sect, datestr)
@@ -1046,6 +1202,16 @@ def _run_one_i2s(run_dir, i2s_cmd):
 
 
 def _list_completed_spectra(run_dir):
+    """
+    Create a dictionary listing the times each spectra file under a run directory was modified.
+
+    :param run_dir: the top run directory (must contain subdirectory "spectra" that the spectra are actually written in)
+    :type run_dir: str
+
+    :return: a dictionary with the spectra file names (base names only) as keys and the modification times (Unix
+     timestamps) as values.
+    :rtype: dict
+    """
     spectra = dict()
     spectra_files = glob(os.path.join(run_dir, 'spectra', '*'))
     for f in spectra_files:
@@ -1054,6 +1220,19 @@ def _list_completed_spectra(run_dir):
 
 
 def _compare_completed_spectra(old_dict, new_dict, run_dir):
+    """
+    Create a list of spectra files that have been modified or created.
+
+    :param old_dict: dictionary returned by :func:`_list_completed_spectra` before running I2S.
+    :type old_dict: dict
+
+    :param new_dict: dictionary returned by :func:`_list_completed_spectra` after running I2S.
+    :type new_dict: dict
+
+    :param run_dir: run directory containing the "spectra" directory in question.
+    :type run_dir: str
+    :return:
+    """
     new_files = []
     for fname, mtime in new_dict.items():
         if fname not in old_dict or mtime > old_dict[fname]:
