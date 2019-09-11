@@ -159,7 +159,8 @@ def load_config_file(cfg_file):
     return cfg
 
 
-def make_i2s_run_files(dirs_list, run_files, run_file_save_dir=None, overwrite=False, slice_dir=None):
+def make_i2s_run_files(dirs_list, run_files, run_file_save_dir=None, overwrite=False, slice_dir=None,
+                       exclude_dates=''):
     """
     Create new I2S run files using other files as templates
     
@@ -185,8 +186,15 @@ def make_i2s_run_files(dirs_list, run_files, run_file_save_dir=None, overwrite=F
      the slices might be; however, this will almost always need to be specified.
     :type slice_dir: str
 
+    :param exclude_dates: full date strings (xxYYYYMMDD) to exclude, i.e. not make a run file for. Give as a list of
+     date strings or a comma separated list (no spaces).
+    :type exclude_dates: list(str) or str
+
     :return: none
     """
+    if isinstance(exclude_dates, str):
+        exclude_dates = exclude_dates.split(',')
+
     avail_target_dates = target_utils.build_target_dirs_dict(target_dirs=[], dirs_list=dirs_list,
                                                              flat=True, full_datestr=True)
     for site, site_dict in avail_target_dates.items():
@@ -199,6 +207,10 @@ def make_i2s_run_files(dirs_list, run_files, run_file_save_dir=None, overwrite=F
         # the most recent file before a missing date as the template if we need to make a new input file. If there's not
         # a file, then copy one to be that file.
         for datestr, runfile in run_file_dict.items():
+            if datestr in exclude_dates:
+                logger.debug('{} excluded, skipping'.format(datestr))
+                continue
+
             if runfile is None:
                 _make_new_i2s_run_file(datestr=datestr, run_files=run_file_dict,
                                        save_dir=run_file_save_dir, overwrite=overwrite, slice_dir=slice_dir)
@@ -1522,6 +1534,9 @@ def parse_make_i2s_runfile_args(parser):
                         help='Directory containing slice run directories. If not given, then the one specified by the '
                              'original run file is used. This is used to generate the list of runs at the bottom of a '
                              'slice run file. With opus files, this has no effect.')
+    parser.add_argument('-e', '--exclude-dates', default='',
+                        help='Comma-separate list of dates to exclude. Give full date strings (xxYYYYMMDD) and do '
+                             'not put spaces in the list.')
     parser.add_argument('-o', '--overwrite', action='store_true',
                         help='Overwrite input files if the destination file already exists.')
     parser.set_defaults(driver_fxn=make_i2s_run_files)
