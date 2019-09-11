@@ -187,6 +187,24 @@ def read_i2s_input_params(infile, last_header=_default_last_header_param):
     return header_params, run_files
 
 
+def slice_line_date(slice_dict):
+    """
+    Create a datetime object corresponding to a line in a slice input file
+
+    :param slice_dict: a dictionary for one scan from the bottom of a slice-i2s run file, returned by
+     :func:`read_i2s_input_params`.
+    :type slice_dict: dict
+
+    :return: the datetime of that line
+    :rtype: :class:`datetime.datetime`
+    """
+    return dt.datetime(int(slice_dict['year']), int(slice_dict['month']), int(slice_dict['day']))
+
+
+def slice_date_subdir(date, run):
+    return '{}.{}'.format(date.strftime('%y%m%d'), run)
+
+
 def i2s_use_slices(infile):
     _, igrams = read_i2s_input_params(infile)
     if len(igrams) == 0:

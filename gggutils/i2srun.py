@@ -824,7 +824,7 @@ def _link_slices(cfg, site, datestr, i2s_opts, overwrite=False, clean_links=Fals
     last_run_date = None
     for idx, line in enumerate(run_lines):
         run_date = dt.datetime(int(line['year']), int(line['month']), int(line['day'])).strftime('%y%m%d')
-        slice_run_dir = '{}.{}'.format(run_date, line['run'])
+        slice_run_dir = runutils.slice_date_subdir(run_date, line['run'])
         if not slices_need_org:
             if run_date != last_run_date:
                 # This check avoids lots of debug messages about not overwriting an existing symlink because typically
@@ -1041,6 +1041,14 @@ def _date_subdir(cfg, site, datestr):
     return os.path.join(run_top_dir, site_sect.name, datestr)
 
 
+def _igm_subdir(run_dir):
+    return os.path.join(run_dir, 'igms')
+
+
+def _slices_subdir(run_dir):
+    return os.path.join(run_dir, 'slices')
+
+
 def _group_i2s_input_files(input_files):
     """
     Group I2S input files by site
@@ -1117,6 +1125,98 @@ def _get_date_cfg_option(site_cfg, datestr, optname):
     else:
         raise exceptions.ConfigException('The option "{}" was not found in the date-specific section ({}) nor the '
                                          'overall site exception'.format(optname, key))
+
+
+def check_i2s_links(cfg_file, dump_level=1):
+    """
+    Verify interferogram or slice links
+
+    :param cfg_file: the path to the config file to use that specifies where the input data may be found
+    :type cfg_file: str
+
+    :param dump_level: how much information to print to the screen. 0 = nothing, only the return value will indicate if
+     any links are missing (0 = no, >0 = yes). 1 = print number of dates that each site has missing igrams. 2 = print
+     number of missing igrams for each date. 3 = print exactly which igrams are missing.
+    :type dump_level: int
+
+    :return: status code, 0 means all igrams/slices found, >0 means some are missing.
+    :rtype: int
+    """
+
+    cfg = load_config_file(cfg_file)
+    return_code = 0
+    for site, site_sect in cfg['Sites'].items():
+        n_days_missing = 0
+        for datestr in site_sect.keys():
+            run_dir = _date_subdir(cfg, site, datestr)
+            run_file = os.path.join(run_dir, 'slice-i2s.in')
+            if not os.path.exists(run_file):
+                run_file = os.path.join(run_dir, 'opus-i2s.in')
+            if not os.path.exists(run_file):
+                raise RuntimeError('No I2S run file found in {}'.format(run_dir))
+
+            if runutils.i2s_use_slices(run_file):
+                missing = _check_slice_links(run_directory=run_dir, run_file=run_file)
+            else:
+                missing = _check_opus_links(run_directory=run_dir, run_file=run_file)
+
+            if len(missing) > 0:
+                n_days_missing += 1
+                return_code = 1
+                if dump_level == 0:
+                    return 1
+            if dump_level >= 2:
+                print('{}: {} missing'.format(datestr, len(missing)))
+            if dump_level >= 3:
+                print('  * ' + '\n  * '.join(missing))
+
+        if dump_level >= 1:
+            print('{}: {} dates missing at least 1 igram/slice'.format(site, n_days_missing))
+
+    return return_code
+
+
+def _check_opus_links(run_directory, run_file):
+    _, igram_files = runutils.read_i2s_input_params(run_file)
+    missing_igms = []
+    for igm in igram_files:
+        igm_path = igm['opus-file']
+        if not os.path.isabs(igm_path):
+            igm_path = os.path.join(_igm_subdir(run_directory), igm_path)
+        igm_basefile = os.path.basename(igm_path)
+
+        # Read the link and check if the file pointed to exists - do this rather than rely on os.path.exists returning
+        # False if the target of a link doesn't exist b/c the documentation of os.path.lexists suggests that exists()
+        # might behave differently if os.lstat() is not available
+        igm_link = os.readlink(igm_path)
+        if not os.path.exists(igm_link):
+            missing_igms.append(igm_basefile)
+
+    return missing_igms
+
+
+def _check_slice_links(run_directory, run_file):
+    _, slices = runutils.read_i2s_input_params(run_file)
+    slice_dir = _slices_subdir(run_directory)
+    missing_slices = []
+
+    # We won't be able to check that every slice is present easily because I have found no guarantee that the number
+    # of slices is always the same, nor can we rely on the last slice number of the current scan being the one before
+    # the next scan b/c we might have to skip some scans. So for now, this will be a very naive check that just
+    # verifies that the .info and slice file for the start of the run are present.
+
+    for slc in slices:
+        slice_date = runutils.slice_line_date(slc)
+        date_subdir = runutils.slice_date_subdir(slice_date, slc['run'])
+        full_slice_dir = os.path.join(slice_dir, date_subdir, 'scan')
+        slice_num = slc['slice']
+        for f in ('b{}.0', 'b{}.0.info', 'b{}.1.info'):
+            f = f.format(slice_num)
+            if not os.path.exists(os.path.join(full_slice_dir, f)):
+                missing_slices.append(slice_num)
+                break
+
+    return missing_slices
 
 
 def run_all_i2s(cfg_file, n_procs=1):
@@ -1443,6 +1543,18 @@ def parse_link_i2s_args(parser):
     parser.set_defaults(driver_fxn=link_i2s_input_files)
 
 
+def parse_check_i2s_link_args(parser):
+    parser.description = 'Check I2S input file links and report which ones are missing. Note that currently the ' \
+                         'check for slices is rather naive, and only checks that the first slice in a scan is present.'
+    parser.add_argument('cfg_file', help='The config file to use to find the files to check that they were linked')
+    parser.add_argument('-d', '--dump-level', default=1,
+                        help='The level of information to include in the print out. 0 = none, only the exit code will '
+                             'indicate this (0 = none missing, >0 = some missing). 1 = print number of dates missing '
+                             'at least one input file for each site. 2 = print number of input files missing for each '
+                             'date. 3 = print list of input files missing.')
+    parser.set_defaults(driver_fxn=check_i2s_links)
+
+
 def parse_run_i2s_args(parser):
     parser.description = 'Run I2S in bulk for all target interferograms specified in a config file'
     parser.add_argument('cfg_file', help='The configuration file to use to drive the execution of I2S')
@@ -1475,6 +1587,9 @@ def parse_i2s_args(parser):
 
     link_i2s = subp.add_parser('link-inp', help='Link the input files to run I2S in bulk')
     parse_link_i2s_args(link_i2s)
+
+    check_links = subp.add_parser('chk-links', help='Check the linked I2S input files')
+    parse_check_i2s_link_args(check_links)
 
     run_i2s = subp.add_parser('run', help='Run I2S in batch')
     parse_run_i2s_args(run_i2s)

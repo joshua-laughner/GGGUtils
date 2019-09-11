@@ -1,4 +1,5 @@
 from argparse import ArgumentParser
+import sys
 
 from gggutils import target_utils, i2srun, ggglogging
 
@@ -23,8 +24,11 @@ def main():
     args = parse_args()
     ggglogging.setup_logging_from_clargs(args)
     driver = args.pop('driver_fxn')
-    driver(**args)
+    return driver(**args)
 
 
 if __name__ == '__main__':
-    main()
+    status = main()
+    if not isinstance(status, int):
+        status = 0
+    sys.exit(status)
