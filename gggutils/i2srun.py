@@ -1147,7 +1147,9 @@ def check_i2s_links(cfg_file, dump_level=1):
     return_code = 0
     for site, site_sect in cfg['Sites'].items():
         n_days_missing = 0
-        for datestr in site_sect.keys():
+        n_days = 0
+        for datestr in site_sect.sections:
+            n_days += 1
             run_dir = _date_subdir(cfg, site, datestr)
             run_file = os.path.join(run_dir, 'slice-i2s.in')
             if not os.path.exists(run_file):
@@ -1155,10 +1157,19 @@ def check_i2s_links(cfg_file, dump_level=1):
             if not os.path.exists(run_file):
                 raise RuntimeError('No I2S run file found in {}'.format(run_dir))
 
-            if runutils.i2s_use_slices(run_file):
-                missing = _check_slice_links(run_directory=run_dir, run_file=run_file)
-            else:
-                missing = _check_opus_links(run_directory=run_dir, run_file=run_file)
+            try:
+                if runutils.i2s_use_slices(run_file):
+                    missing = _check_slice_links(run_directory=run_dir, run_file=run_file)
+                else:
+                    missing = _check_opus_links(run_directory=run_dir, run_file=run_file)
+            except exceptions.I2SFormatException as err:
+                if 'cannot tell' in err.args[0]:
+                    # Can't tell if a file uses slices or full igrams if there's no files listed,
+                    # but if there's none listed, then there can't be any missing.
+                    missing = []
+                else:
+                    # Other errors should be raised as normal
+                    raise
 
             if len(missing) > 0:
                 n_days_missing += 1
@@ -1167,11 +1178,13 @@ def check_i2s_links(cfg_file, dump_level=1):
                     return 1
             if dump_level >= 2:
                 print('{}: {} missing'.format(datestr, len(missing)))
-            if dump_level >= 3:
+            if dump_level >= 3 and len(missing) > 0:
                 print('  * ' + '\n  * '.join(missing))
 
         if dump_level >= 1:
-            print('{}: {} dates missing at least 1 igram/slice'.format(site, n_days_missing))
+            print('{}: {}/{} dates missing at least 1 igram/slice'.format(site, n_days_missing, n_days))
+            if dump_level > 1:
+                print('')
 
     return return_code
 
@@ -1180,7 +1193,7 @@ def _check_opus_links(run_directory, run_file):
     _, igram_files = runutils.read_i2s_input_params(run_file)
     missing_igms = []
     for igm in igram_files:
-        igm_path = igm['opus-file']
+        igm_path = igm['opus_file']
         if not os.path.isabs(igm_path):
             igm_path = os.path.join(_igm_subdir(run_directory), igm_path)
         igm_basefile = os.path.basename(igm_path)
@@ -1188,9 +1201,13 @@ def _check_opus_links(run_directory, run_file):
         # Read the link and check if the file pointed to exists - do this rather than rely on os.path.exists returning
         # False if the target of a link doesn't exist b/c the documentation of os.path.lexists suggests that exists()
         # might behave differently if os.lstat() is not available
-        igm_link = os.readlink(igm_path)
-        if not os.path.exists(igm_link):
+        try:
+            igm_link = os.readlink(igm_path)
+        except FileNotFoundError:
             missing_igms.append(igm_basefile)
+        else:
+            if not os.path.exists(igm_link):
+                missing_igms.append(igm_basefile)
 
     return missing_igms
 
@@ -1547,7 +1564,7 @@ def parse_check_i2s_link_args(parser):
     parser.description = 'Check I2S input file links and report which ones are missing. Note that currently the ' \
                          'check for slices is rather naive, and only checks that the first slice in a scan is present.'
     parser.add_argument('cfg_file', help='The config file to use to find the files to check that they were linked')
-    parser.add_argument('-d', '--dump-level', default=1,
+    parser.add_argument('-d', '--dump-level', default=1, type=int,
                         help='The level of information to include in the print out. 0 = none, only the exit code will '
                              'indicate this (0 = none missing, >0 = some missing). 1 = print number of dates missing '
                              'at least one input file for each site. 2 = print number of input files missing for each '

@@ -83,7 +83,7 @@ def modify_i2s_input_params(filename, *args, new_file=None, last_header_param=_d
     # We'll always write the changes to a temporary file first. That way we keep the code simple, and just which file
     # it gets copied to changes
     with tempfile.NamedTemporaryFile('w') as tfile:
-        with open(filename, 'r') as robj, open(tfile.name, 'w') as wobj:
+        with open(filename, 'rb') as robj, open(tfile.name, 'w') as wobj:
             for param_num, subparam_num, value, comment, is_param in iter_i2s_input_params(robj, include_all_lines=True):
                 curr_param_lines = _nlines_for_param(param_num)
                 if is_param:
