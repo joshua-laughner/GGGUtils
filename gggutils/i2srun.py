@@ -496,6 +496,9 @@ def add_slice_info_to_i2s_run_file(run_file, new_run_file=None, start_date=None,
         fobj.write('\n')
         for date, run, slice_nums in _iter_slice_runs(slice_dir=slice_dir, start_date=start_date, end_date=end_date,
                                                       start_run=start_run, end_run=end_run, scantype=scantype):
+            if len(slice_nums) == 0:
+                logger.debug('{} run {}: Skipping a scan with no slices'.format(date.strftime('%Y-%m-%d'), run))
+                continue
             # just get the integer values, don't need 0 padding (so no need to use strftime)
             year = date.year
             month = date.month
@@ -588,8 +591,8 @@ def _parse_add_slice_info_inputs(run_file, start_date, end_date, start_run, end_
         run_dates = dict()
         for full_fname in run_dirs:
             fname = os.path.basename(full_fname.rstrip(os.sep))
-            if not re.match(r'\d{6}\.\d+', fname):
-                logger.debug('Skipping {} as it is not a run directory'.format(full_fname))
+            if not re.match(r'\d{6}\.\d+$', fname):
+                logger.debug('Skipping {} as its name cannot be parsed as a run directory'.format(full_fname))
                 continue
             date_str, run_str = fname.split('.')
             key = dt.datetime.strptime(date_str, '%y%m%d')
@@ -835,7 +838,7 @@ def _link_slices(cfg, site, datestr, i2s_opts, overwrite=False, clean_links=Fals
     _, run_lines = runutils.read_i2s_input_params(i2s_input_file)
     last_run_date = None
     for idx, line in enumerate(run_lines):
-        run_date = dt.datetime(int(line['year']), int(line['month']), int(line['day'])).strftime('%y%m%d')
+        run_date = dt.datetime(int(line['year']), int(line['month']), int(line['day']))
         slice_run_dir = runutils.slice_date_subdir(run_date, line['run'])
         if not slices_need_org:
             if run_date != last_run_date:
