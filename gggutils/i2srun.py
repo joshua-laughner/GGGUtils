@@ -780,15 +780,13 @@ def _link_igms(cfg, site, datestr, i2s_opts, overwrite, clean_links, clean_spect
                 src=src_file, lnum=i, infile=i2s_input_file
             )
             if ignore_missing:
-                logger.warning(msg)
+                logger.info(msg)
             else:
                 raise exceptions.I2SDataException(msg)
-        link_dict[src_file] = os.path.join(igms_dir, runf)
+        else:
+            _make_link(src_file, os.path.join(igms_dir, runf), overwrite=overwrite)
 
-    if not files_missing:
-        for src, dst in link_dict.items():
-            _make_link(src, dst, overwrite=overwrite)
-    else:
+    if files_missing:
         logger.warning('{} had 1 or more igrams missing. It will probably not run for I2S.'.format(datestr))
 
 
@@ -837,11 +835,12 @@ def _link_slices(cfg, site, datestr, i2s_opts, overwrite=False, clean_links=Fals
     # we can just link the preexisting directories
     _, run_lines = runutils.read_i2s_input_params(i2s_input_file)
     last_run_date = None
+    last_run_num = None
     for idx, line in enumerate(run_lines):
         run_date = dt.datetime(int(line['year']), int(line['month']), int(line['day']))
         slice_run_dir = runutils.slice_date_subdir(run_date, line['run'])
         if not slices_need_org:
-            if run_date != last_run_date:
+            if run_date != last_run_date or line['run'] != last_run_num:
                 # This check avoids lots of debug messages about not overwriting an existing symlink because typically
                 # all or most of the lines in a run file will be for the same day (in target obs) and even outside
                 # target obs. there will be lots with the same date
@@ -855,6 +854,7 @@ def _link_slices(cfg, site, datestr, i2s_opts, overwrite=False, clean_links=Fals
                                    dest_run_dir=os.path.join(igms_dir, slice_run_dir), overwrite=overwrite)
 
         last_run_date = run_date
+        last_run_num = line['run']
 
 
 def _link_slices_needs_org(slice_files, run_lines, run_lines_index, dest_run_dir, overwrite):
