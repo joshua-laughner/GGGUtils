@@ -159,6 +159,54 @@ def load_config_file(cfg_file):
     return cfg
 
 
+def make_one_i2s_run_file(target_data_dir, run_files, run_file_save_dir=None, overwrite=False, slice_dir='slices'):
+    """
+    Make a single I2S run file for a given target directory
+
+    :param target_data_dir: the directory with the target data to make a run file for. The directory name must follow
+     the xxYYYYMMDD pattern.
+    :type target_data_dir: str
+
+    :param run_files: list of run files or single run file to use a template(s) for the new run file, i.e. to copy the
+     header parameters from.
+    :type run_files: str or list(str)
+
+    :param run_file_save_dir: where to save the new run files. If ``None``, they will be saved in the same directory
+     as their template. Note however, that unlike :func:`make_i2s_run_files`, this function always tries to create a
+     run file, even if there already is one for this target data directory in the list of run files given. So be sure
+     that ``overwrite`` has the value you want.
+    :type run_file_save_dir: str or None
+
+    :param overwrite: whether or not to overwrite an existing file.
+    :type overwrite: bool
+
+    :param slice_dir: directory to find slice directories (named YYMMDD.R) to use to populate the list at the bottom of
+     the run file. Has no effect if copying a template to run full interferograms. Note that this is interpreted
+     differently based on its format:
+
+        * If an absolute path, it is used unmodified.
+        * If a relative path *starting with a period* (e.g. "./slices"), it is considered relative to the current
+          working directory.
+        * If a relative path that does *not* start with a period (e.g. "slices"), it is considered relative to the
+          ``target_data_dir``.
+
+    :type slice_dir: str
+
+    :return: none, creates run files.
+    """
+    target_datestr = os.path.basename(target_data_dir.rstrip(os.sep))
+    if not re.match(r'\w\w\d{8}$', target_datestr):
+        raise ValueError('{} does not appear to be a target data directory'.format(target_data_dir))
+    if not os.path.isabs(slice_dir) and not slice_dir.startswith('.'):
+        slice_dir = os.path.join(target_data_dir, slice_dir)
+    if isinstance(run_files, str):
+        run_files = [run_files]
+
+    run_file_dict = _list_existing_i2s_run_files([target_datestr], run_files=run_files)
+    _make_new_i2s_run_file(datestr=target_datestr, run_files=run_file_dict, save_dir=run_file_save_dir,
+                           overwrite=overwrite, slice_dir=slice_dir)
+
+
 def make_i2s_run_files(dirs_list, run_files, run_file_save_dir=None, overwrite=False, slice_dir=None,
                        exclude_dates=''):
     """
@@ -201,7 +249,7 @@ def make_i2s_run_files(dirs_list, run_files, run_file_save_dir=None, overwrite=F
         if len(site_dict) == 0:
             logger.info('No date folders found for {}'.format(site))
             continue
-        run_file_dict = _list_existing_i2s_run_files(site_dict, run_files=run_files)
+        run_file_dict = _list_existing_i2s_run_files(site_dict.keys(), run_files=run_files)
 
         # Now for each target date, if it has a file, reset the last key found to have a file to that, so that we use
         # the most recent file before a missing date as the template if we need to make a new input file. If there's not
@@ -216,12 +264,12 @@ def make_i2s_run_files(dirs_list, run_files, run_file_save_dir=None, overwrite=F
                                        save_dir=run_file_save_dir, overwrite=overwrite, slice_dir=slice_dir)
 
 
-def _list_existing_i2s_run_files(target_date_dict, run_files):
+def _list_existing_i2s_run_files(target_dates, run_files):
     """
     Make a dictionary indicating which target days already have run files.
 
-    :param target_date_dict: a dictionary with full date strings (xxYYYYMMDD) as keys. The values are not used.
-    :type target_date_dict: dict
+    :param target_dates: a list of full date strings (xxYYYYMMDD) to find run files for.
+    :type target_dates: list(str)
 
     :param run_files: the list of run files available to be matched with target days
     :type run_files: list(str)
@@ -230,7 +278,8 @@ def _list_existing_i2s_run_files(target_date_dict, run_files):
      file as the value, or ``None`` if no run file is available.
     :rtype: :class:`collections.OrderedDict`
     """
-    target_dates = runutils.sort_datestr(target_date_dict.keys())
+
+    target_dates = runutils.sort_datestr(target_dates)
     # Get the site abbreviation from the target dates. Assume its always the first two characters of the date strings.
     site_abbrev = set(td[:2] for td in target_dates)
     if len(site_abbrev) != 1:
@@ -1527,9 +1576,7 @@ def parse_make_i2s_runfile_args(parser):
     parser.add_argument('dirs_list', metavar='target_dirs_list',
                         help='File containing a list of target directories (directories with subdirectories named '
                              'xxYYYYMMDD), one per line.')
-    parser.add_argument('run_files', nargs='*', default=None,
-                        help='Existing run files to use as templates. If any are given, then only those are used as '
-                             'templates rather than all .in files in the run_file_dir')
+    parser.add_argument('run_files', nargs='+', default=None, help='Existing run files to use as templates.')
     parser.add_argument('-s', '--save-dir', dest='run_file_save_dir',
                         help='Directory to write the new run files to. If not given, new files are saved to the same '
                              'directory as the file they are a copy of.')
@@ -1543,6 +1590,22 @@ def parse_make_i2s_runfile_args(parser):
     parser.add_argument('-o', '--overwrite', action='store_true',
                         help='Overwrite input files if the destination file already exists.')
     parser.set_defaults(driver_fxn=make_i2s_run_files)
+
+
+def parse_make_one_i2s_runfile_args(parser):
+    parser.add_argument('target_data_dir', help='Target directory (named following the xxYYYYMMDD pattern) to make '
+                                                'a run file for.')
+    parser.add_argument('run_files', nargs='+', default=None, help='Existing run files to use as templates.')
+    parser.add_argument('-s', '--save-dir', dest='run_file_save_dir',
+                        help='Directory to write the new run files to. If not given, new files are saved to the same '
+                             'directory as the file they are a copy of.')
+    parser.add_argument('-d', '--slice-dir', default='slices',
+                        help='Directory containing slice run directories. If given as an absolute path or a relative '
+                             'path starting with "." (e.g. "./slices"), it is interpreted normally. HOWEVER, if given '
+                             'as a relative path NOT starting with ".", it is interpreted relative to TARGET_DATA_DIR.')
+    parser.add_argument('-o', '--overwrite', action='store_true',
+                        help='Overwrite input files if the destination file already exists.')
+    parser.set_defaults(driver_fxn=make_one_i2s_run_file)
 
 
 def parse_copy_i2s_target_runfiles_args(parser):
@@ -1616,6 +1679,9 @@ def parse_i2s_args(parser):
 
     make_runfiles = subp.add_parser('make-runs', help='Make missing I2S run files')
     parse_make_i2s_runfile_args(make_runfiles)
+
+    make_one_runfile = subp.add_parser('make-one-run', help='Make one I2S run file')
+    parse_make_one_i2s_runfile_args(make_one_runfile)
 
     cp_runfiles = subp.add_parser('cp-runs', help='Copy target I2S run files to a single directory')
     parse_copy_i2s_target_runfiles_args(cp_runfiles)
