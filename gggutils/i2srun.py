@@ -17,7 +17,7 @@ from . import _etc_dir, _i2s_halt_file
 from . import runutils, exceptions, target_utils
 
 
-logger = getLogger('gggrun')
+logger = getLogger('i2srun')
 
 
 def build_cfg_file(cfg_file, i2s_input_files, old_cfg_file=None):
