@@ -700,12 +700,15 @@ def _iter_slice_runs(slice_dir, start_date, end_date, start_run, end_run, scanty
     """
     curr_date = start_date
     while curr_date <= end_date:
+        gave_warning = False
         for run in range(start_run, end_run+1):
             curr_dir = os.path.join(slice_dir, '{}.{}'.format(curr_date.strftime('%y%m%d'), run))
             ifs_log_file = os.path.join(curr_dir, 'IFSretr.log')
             if not os.path.exists(ifs_log_file):
-                logger.warning('Cannot add data from {}, no IFSretr.log file'.format(curr_dir))
-                return
+                if not gave_warning:
+                    logger.warning('Cannot add data from {}, no IFSretr.log file'.format(curr_dir))
+                    gave_warning = True
+                continue
             with open(ifs_log_file, 'r') as robj:
                 in_scan = False
                 for line in robj:
