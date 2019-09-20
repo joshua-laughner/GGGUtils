@@ -3,6 +3,8 @@ from configobj import ConfigObj, flatten_errors
 import datetime as dt
 from glob import glob
 from logging import getLogger
+from matplotlib import pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
 from multiprocessing import Pool
 import os
 import re
@@ -14,7 +16,7 @@ from validate import Validator
 from textui import uielements
 
 from . import _etc_dir, _i2s_halt_file
-from . import runutils, exceptions, target_utils
+from . import runutils, exceptions, target_utils, igram_analysis
 
 
 logger = getLogger('i2srun')
@@ -739,6 +741,19 @@ def _iter_slice_runs(slice_dir, start_date, end_date, start_run, end_run, scanty
         curr_date += dt.timedelta(days=1)
 
 
+def iter_i2s_dirs(cfg, incl_datestr=False):
+    for site in cfg['Sites'].sections.items():
+        site_sect = cfg['Sites'][site]
+        for sitedate in cfg['Sites'][site].sections:
+            root_dir = _get_date_cfg_option(site_sect, sitedate, 'site_root_dir')
+            subdir = _get_date_cfg_option(site_sect, sitedate, 'subdir')
+            full_dir = os.path.join(root_dir, sitedate, subdir)
+            if incl_datestr:
+                yield full_dir, sitedate
+            else:
+                yield full_dir
+
+
 def link_i2s_input_files(cfg_file, overwrite=False, clean_links=False, clean_spectra=False, ignore_missing_igms=False):
     """
     Link all the input interferograms/slices and the required input files for I2S into the batch run directory
@@ -1431,6 +1446,59 @@ def _compare_completed_spectra(old_dict, new_dict, run_dir):
     return new_files
 
 
+def plot_rough_spectra(cfg_file, save_dir, plots_per_page=4):
+    """
+    Make a rough plot of all completed spectra
+
+    :param cfg_file: I2S bulk run config file, will iterate through the run directories specified in it
+    :type cfg_file: str
+
+    :param save_dir: where to save the .pdfs of the spectra
+    :type save_dir: str
+
+    :param plots_per_page: number of plots to include on a single
+
+    :return: none
+    """
+
+    cfg = load_config_file(cfg_file)
+    last_site = None
+    pdf = None
+    try:
+        for run_dir, datestr in iter_i2s_dirs(cfg, incl_datestr=True):
+            site_abbrv = datestr[:2]
+            if site_abbrv != last_site:
+                if last_site is not None:
+                    pdf.close()
+                pdf_name = '{}_spectra.pdf'.format(site_abbrv)
+                pdf_name = os.path.join(save_dir, pdf_name)
+                pdf = PdfPages(pdf_name)
+                last_site = site_abbrv
+
+            spectra_dir = os.path.join(run_dir, 'spectra')
+            spectra_files = sorted(glob(os.path.join(spectra_dir, '*')))
+            nspec = len(spectra_files)
+            ispec = 0
+            while ispec < nspec:
+                iplot = ispec % plots_per_page
+                if iplot == 0:
+                    nplots = min(plots_per_page, nspec - ispec)
+                    fig, ax = plt.subplots(1, nplots, figsize=(16, 4*nplots))
+                spectra = igram_analysis.read_spectrum_raw(spectra_files[ispec])
+                ax[iplot].plot(spectra[600:])
+                ax.set_title(os.path.basename(spectra_files[ispec]))
+                if iplot == (nplots - 1):
+                    ax.set_xlabel('Arbitrary index')
+                    fig.suptitle(datestr)
+                    plt.tight_layout()
+                    plt.subplots_adjust(top=0.85)
+                    pdf.savefig(fig)
+
+    finally:
+        if pdf is not None:
+            pdf.close()
+
+
 def make_i2s_halt_file():
     """
     Create the file signaling batch I2S to stop
@@ -1673,6 +1741,15 @@ def parse_halt_i2s_args(parser):
     parser.set_defaults(driver_fxn=make_i2s_halt_file)
 
 
+def parser_plot_rough_spec(parser):
+    parser.description = 'Make .pdf file of rough spectra produced by I2S'
+    parser.add_argument('cfg_file', help='The configuration file to use to drive the execution of I2S')
+    parser.add_argument('save_dir', help='Where to save the .pdfs produced. Will be one per site')
+    parser.add_argument('-n', '--plots-per-page', default=4, type=int,
+                        help='Number of plots to put on a single pdf page')
+    parser.set_defaults(driver_fxn=plot_rough_spectra)
+
+
 def parse_i2s_args(parser):
     subp = parser.add_subparsers()
 
@@ -1705,3 +1782,6 @@ def parse_i2s_args(parser):
 
     halt_i2s = subp.add_parser('halt', help='Gracefully halt an active batch I2S run')
     parse_halt_i2s_args(halt_i2s)
+
+    plot_spec = subp.add_parser('plot-spec', help='Plot rough spectra')
+    parser_plot_rough_spec(plot_spec)
