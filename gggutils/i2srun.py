@@ -202,7 +202,11 @@ def make_one_i2s_run_file(target_data_dir, run_files, run_file_save_dir=None, ov
     if isinstance(run_files, str):
         run_files = [run_files]
 
-    run_file_dict = _list_existing_i2s_run_files([target_datestr], run_files=run_files)
+    run_file_dict = dict()
+    for runf in run_files:
+        base_runf = os.path.basename(runf)
+        key = re.search(r'\w\w\d{8}', base_runf).group()
+        run_file_dict[key] = runf
     _make_new_i2s_run_file(datestr=target_datestr, run_files=run_file_dict, save_dir=run_file_save_dir,
                            overwrite=overwrite, slice_dir=slice_dir)
 
@@ -701,6 +705,7 @@ def _iter_slice_runs(slice_dir, start_date, end_date, start_run, end_run, scanty
             ifs_log_file = os.path.join(curr_dir, 'IFSretr.log')
             if not os.path.exists(ifs_log_file):
                 logger.warning('Cannot add data from {}, no IFSretr.log file'.format(curr_dir))
+                return
             with open(ifs_log_file, 'r') as robj:
                 in_scan = False
                 for line in robj:
