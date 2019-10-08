@@ -741,8 +741,8 @@ def _iter_slice_runs(slice_dir, start_date, end_date, start_run, end_run, scanty
         curr_date += dt.timedelta(days=1)
 
 
-def iter_i2s_dirs(cfg, incl_datestr=False):
-    for site in cfg['Sites'].sections.items():
+def iter_target_dirs(cfg, incl_datestr=False):
+    for site in cfg['Sites'].sections:
         site_sect = cfg['Sites'][site]
         for sitedate in cfg['Sites'][site].sections:
             root_dir = _get_date_cfg_option(site_sect, sitedate, 'site_root_dir')
@@ -752,6 +752,18 @@ def iter_i2s_dirs(cfg, incl_datestr=False):
                 yield full_dir, sitedate
             else:
                 yield full_dir
+
+
+def iter_i2s_dirs(cfg, incl_datestr=False):
+    for site in cfg['Sites'].sections:
+        site_sect = cfg['Sites'][site]
+        for sitedate in cfg['Sites'][site].sections:
+            run_dir = _date_subdir(cfg, site, sitedate)
+            if incl_datestr:
+                yield run_dir, sitedate
+            else:
+                yield run_dir
+    
 
 
 def link_i2s_input_files(cfg_file, overwrite=False, clean_links=False, clean_spectra=False, ignore_missing_igms=False):
@@ -1446,7 +1458,7 @@ def _compare_completed_spectra(old_dict, new_dict, run_dir):
     return new_files
 
 
-def plot_rough_spectra(cfg_file, save_dir, plots_per_page=4):
+def plot_rough_spectra(cfg_file, save_dir, plots_per_page=4, overwrite=True):
     """
     Make a rough plot of all completed spectra
 
@@ -1458,45 +1470,46 @@ def plot_rough_spectra(cfg_file, save_dir, plots_per_page=4):
 
     :param plots_per_page: number of plots to include on a single
 
+    :param overwrite: whether or not to overwrite existing plot file.
+
     :return: none
     """
 
     cfg = load_config_file(cfg_file)
-    last_site = None
-    pdf = None
-    try:
-        for run_dir, datestr in iter_i2s_dirs(cfg, incl_datestr=True):
-            site_abbrv = datestr[:2]
-            if site_abbrv != last_site:
-                if last_site is not None:
-                    pdf.close()
-                pdf_name = '{}_spectra.pdf'.format(site_abbrv)
-                pdf_name = os.path.join(save_dir, pdf_name)
-                pdf = PdfPages(pdf_name)
-                last_site = site_abbrv
+    for run_dir, datestr in iter_i2s_dirs(cfg, incl_datestr=True):
+        pdf_name = '{}_spectra.pdf'.format(datestr)
+        pdf_name = os.path.join(save_dir, pdf_name)
+        if not overwrite and os.path.exists(pdf_name):
+            logger.info('Skipping {} because file already exists'.format(datestr))
+            continue
+        with PdfPages(pdf_name) as pdf:
+            logger.info('Working on site "{}"'.format(datestr))
 
             spectra_dir = os.path.join(run_dir, 'spectra')
             spectra_files = sorted(glob(os.path.join(spectra_dir, '*')))
             nspec = len(spectra_files)
             ispec = 0
             while ispec < nspec:
+                logger.debug('Plotting {} ({}/{})'.format(spectra_files[ispec], ispec+1, nspec))
                 iplot = ispec % plots_per_page
                 if iplot == 0:
                     nplots = min(plots_per_page, nspec - ispec)
-                    fig, ax = plt.subplots(1, nplots, figsize=(16, 4*nplots))
+                    fig, ax = plt.subplots(nplots, 1, figsize=(16, 4*nplots))
+                    if nplots == 1:
+                        # if only only subplot then ax will not be an array so indexing below
+                        # will not work
+                        ax = [ax]
                 spectra = igram_analysis.read_spectrum_raw(spectra_files[ispec])
                 ax[iplot].plot(spectra[600:])
-                ax.set_title(os.path.basename(spectra_files[ispec]))
+                ax[iplot].set_title(os.path.basename(spectra_files[ispec]))
                 if iplot == (nplots - 1):
-                    ax.set_xlabel('Arbitrary index')
+                    ax[iplot].set_xlabel('Arbitrary index')
                     fig.suptitle(datestr)
                     plt.tight_layout()
                     plt.subplots_adjust(top=0.85)
                     pdf.savefig(fig)
-
-    finally:
-        if pdf is not None:
-            pdf.close()
+                    plt.close(fig)
+                ispec += 1
 
 
 def make_i2s_halt_file():
@@ -1747,6 +1760,8 @@ def parser_plot_rough_spec(parser):
     parser.add_argument('save_dir', help='Where to save the .pdfs produced. Will be one per site')
     parser.add_argument('-n', '--plots-per-page', default=4, type=int,
                         help='Number of plots to put on a single pdf page')
+    parser.add_argument('-k', '--no-overwrite', action='store_false', dest='overwrite',
+                        help='Keep existing plot files, do not overwrite them')
     parser.set_defaults(driver_fxn=plot_rough_spectra)
 
 
