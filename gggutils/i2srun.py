@@ -1,5 +1,5 @@
 from collections import OrderedDict
-from configobj import ConfigObj, flatten_errors
+from configobj import ConfigObj
 import datetime as dt
 from glob import glob
 from logging import getLogger
@@ -11,13 +11,12 @@ import re
 import shutil
 from subprocess import Popen
 import sys
-from validate import Validator
 
 from textui import uielements
 
-from . import _etc_dir, _i2s_halt_file
+from . import _i2s_halt_file
 from . import runutils, exceptions, target_utils, igram_analysis
-
+from .runutils import iter_i2s_dirs, load_config_file, _date_subdir, _get_date_cfg_option
 
 logger = getLogger('i2srun')
 
@@ -111,54 +110,6 @@ def update_cfg_run_files(cfg_file, i2s_run_files, keep_missing=False, new_cfg_fi
                 site_dict[datestr]['i2s_input_file'] = site_files[datestr]
 
     cfg.write()
-
-
-def load_config_file(cfg_file):
-    """
-    Load an I2S run config file, validating options and normalizing paths
-
-    Boolean values will be converted into actual booleans, and paths that are allowed to be relative to the config file
-    will be converted into absolute paths if given as relative
-
-    :param cfg_file: the path to the config file
-    :type cfg_file: str
-
-    :return: the configuration object
-    :rtype: :class:`configobj.ConfigObj`
-    """
-    # paths that, if relative, should be interpreted as relative to the config file. We exclude "subdir" here because
-    # it's relative to the source date directory
-    cfg_file_dir = os.path.abspath(os.path.dirname(cfg_file))
-    path_keys = ('site_root_dir', 'flimit_file', 'i2s_input_file')
-
-    def make_paths_abs(section, key):
-        if key in path_keys and not os.path.isabs(section[key]):
-            section[key] = os.path.abspath(os.path.join(cfg_file_dir, section[key]))
-
-    cfg = ConfigObj(cfg_file, configspec=os.path.join(_etc_dir, 'i2s_in_val.cfg'))
-    validator = Validator()
-    result = cfg.validate(validator, preserve_errors=True)
-
-    if result != True:
-        error_msgs = []
-        for sects, key, msg in flatten_errors(cfg, result):
-            error_msgs.append('{}/{}: {}'.format('/'.join(sects), key, msg))
-
-        final_error_msg = 'There are problems with one or more options in {}:\n*  {}'.format(
-            cfg_file, '\n*  '.join(error_msgs)
-        )
-        raise exceptions.ConfigException(final_error_msg)
-
-    # Make relative paths relative to the config file
-    cfg.walk(make_paths_abs)
-
-    # In the I2S setting section, replace "\\n" and "\\r" with "\n" and "\r" - i.e. undo the
-    # backslash escaping the configobj does. This is necessary because some of the i2s parameters
-    # need to have two lines.
-    for key, value in cfg['I2S'].items():
-        cfg['I2S'][key] = value.replace('\\n', '\n').replace('\\r', '\r')
-
-    return cfg
 
 
 def make_one_i2s_run_file(target_data_dir, run_files, run_file_save_dir=None, overwrite=False, slice_dir='slices'):
@@ -741,31 +692,6 @@ def _iter_slice_runs(slice_dir, start_date, end_date, start_run, end_run, scanty
         curr_date += dt.timedelta(days=1)
 
 
-def iter_target_dirs(cfg, incl_datestr=False):
-    for site in cfg['Sites'].sections:
-        site_sect = cfg['Sites'][site]
-        for sitedate in cfg['Sites'][site].sections:
-            root_dir = _get_date_cfg_option(site_sect, sitedate, 'site_root_dir')
-            subdir = _get_date_cfg_option(site_sect, sitedate, 'subdir')
-            full_dir = os.path.join(root_dir, sitedate, subdir)
-            if incl_datestr:
-                yield full_dir, sitedate
-            else:
-                yield full_dir
-
-
-def iter_i2s_dirs(cfg, incl_datestr=False):
-    for site in cfg['Sites'].sections:
-        site_sect = cfg['Sites'][site]
-        for sitedate in cfg['Sites'][site].sections:
-            run_dir = _date_subdir(cfg, site, sitedate)
-            if incl_datestr:
-                yield run_dir, sitedate
-            else:
-                yield run_dir
-    
-
-
 def link_i2s_input_files(cfg_file, overwrite=False, clean_links=False, clean_spectra=False, ignore_missing_igms=False):
     """
     Link all the input interferograms/slices and the required input files for I2S into the batch run directory
@@ -1117,29 +1043,6 @@ def _group_uses_slices(site_dict):
         return '0', 'igms'
 
 
-def _date_subdir(cfg, site, datestr):
-    """
-    Return the path to the directory where a day's I2S will be run.
-
-    :param cfg: the configuration object from reading the I2S bulk config file.
-    :type cfg: :class:`configobj.ConfigObj`
-
-    :param site: the site abbreviaton
-    :type site: str
-
-    :param datestr: the string defining which date the run directory is for.  May include the site abbreviation
-     (xxYYYYMMDD) or not (YYYYMMDD).
-    :type datestr: str
-
-    :return: the path to the run directory
-    :rtype: str
-    """
-    run_top_dir = cfg['Run']['run_top_dir']
-    site_sect = cfg['Sites'][site]
-    datestr = _find_site_datekey(site_sect, datestr)
-    return os.path.join(run_top_dir, site_sect.name, datestr)
-
-
 def _igm_subdir(run_dir):
     return os.path.join(run_dir, 'igms')
 
@@ -1174,56 +1077,6 @@ def _group_i2s_input_files(input_files):
         group_dict[site][site_date] = f
 
     return group_dict
-
-
-def _find_site_datekey(site_cfg, datestr):
-    """
-    Find a site date key in a site config section
-
-    :param site_cfg: the site config section
-    :type site_cfg: :class:`configobj.Section`
-
-    :param datestr: the date string to search for. May either include or exclude the site abbreviation; including the
-     site abbreviation will be faster.
-    :type datestr: str
-
-    :return: the key in the ``site_cfg`` for the requested date
-    :rtype: str
-    """
-    if datestr in site_cfg.keys():
-        return datestr
-    else:
-        for k in site_cfg.keys():
-            if k.endswith(datestr):
-                return k
-        raise exceptions.SiteDateException('No key matching "{}" found in site "{}"'.format(datestr, site_cfg.name))
-
-
-def _get_date_cfg_option(site_cfg, datestr, optname):
-    """
-    Get a config option for a specific date, falling back on the general site option if not present
-
-    :param site_cfg: the section of the config for that site that includes all the date-specific sections
-    :type site_cfg: :class:`configobj.Section`
-
-    :param datestr: the date string to search for. May either include or exclude the site abbreviation; including the
-     site abbreviation will be faster.
-    :type datestr: str
-
-    :param optname: the option key to search for.
-    :type optname: str
-
-    :return: the option value, from the specific date if found there, from the site if not.
-    :raises exceptions.ConfigExceptions: if the give option isn't found in either the site or date section
-    """
-    key = _find_site_datekey(site_cfg, datestr)
-    if optname in site_cfg[key] and site_cfg[key][optname] is not None:
-        return site_cfg[key][optname]
-    elif optname in site_cfg:
-        return site_cfg[optname]
-    else:
-        raise exceptions.ConfigException('The option "{}" was not found in the date-specific section ({}) nor the '
-                                         'overall site exception'.format(optname, key))
 
 
 def check_i2s_links(cfg_file, dump_level=1):
