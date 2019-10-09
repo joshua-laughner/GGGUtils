@@ -437,6 +437,65 @@ def copy_i2s_run_files_from_target_dirs(dirs_list, save_dir, interactive='choice
                 shutil.copy(input_file, new_fullname)
 
 
+def patch_i2s_run_header(header_example_file, catalogue_files, save_dir, overwrite=False,
+                         last_header_param=runutils._default_last_header_param):
+    """
+    Create new i2s run files by combining a header from one file with a catalogue of slices/igrams from other files
+
+    :param header_example_file: the file to copy the header from
+    :type header_example_file: str
+
+    :param catalogue_files: list of files to copy the catalogue of slices/igrams from
+    :type catalogue_files: list(str)
+
+    :param save_dir: directory to save the new files to
+    :type save_dir: str
+
+    :param overwrite: whether to overwrite files in the save directory
+    :type overwrite: bool
+
+    :param last_header_param: last parameter number considered to be in the header in the run files.
+    :type last_header_param: int
+
+    :return: none, writes new files
+    """
+    header_lines = []
+
+    # First we need to collect all of the lines before the list of slices/igrams, which will be rewritten at the
+    # beginning of each new file.
+    with open(header_example_file, 'rb') as fobj:
+        for param_num, _, value, comment, _ in runutils.iter_i2s_input_params(fobj, include_all_lines=True):
+            if param_num > last_header_param:
+                break
+
+            if len(comment) > 0:
+                line = value + ':' + comment
+            else:
+                # If no comment we don't want a random colon at the end of the line
+                line = value
+
+            header_lines.append(line)
+
+    logger.debug('{} header lines read from {}'.format(len(header_lines), header_example_file))
+    # Now we loop over the files that have the slices/igrams and copy those lines into new files that use the header
+    # of the example file
+    for cat_file in catalogue_files:
+        basename = os.path.basename(cat_file)
+        new_file = os.path.join(save_dir, basename)
+        if not overwrite and os.path.exists(new_file):
+            logger.warning('Not writing {} because it already exists'.format(new_file))
+            continue
+        else:
+            logger.info('Writing {}'.format(new_file))
+
+        with open(cat_file, 'rb') as robj, open(new_file, 'w') as wobj:
+            wobj.writelines(header_lines)
+
+            for param_num, _, value, _ in runutils.iter_i2s_input_params(robj, include_all_lines=False):
+                if param_num > last_header_param:
+                    wobj.write(value)
+
+
 def add_slice_info_to_i2s_run_file(run_file, new_run_file=None, start_date=None, end_date=None, start_run=None,
                                    end_run=None, slice_dir=None, scantype='Solar'):
     """
@@ -1550,6 +1609,18 @@ def parse_make_one_i2s_runfile_args(parser):
     parser.set_defaults(driver_fxn=make_one_i2s_run_file)
 
 
+def parse_patch_i2s_runfiles(parser):
+    # header_example_file, catalogue_files, save_dir, overwrite
+    parser.description = 'Create new I2S run files by combining the header part from one file with the list of ' \
+                         'slices/igrams from others.'
+    parser.add_argument('header_example_file', help='File to copy the header parameters from')
+    parser.add_argument('save_dir', help='Directory to save the new files to.')
+    parser.add_argument('catalogue_files', nargs='+', help='Files to copy the lists of slices/igrams from')
+    parser.add_argument('-o', '--overwrite', action='store_true', help='Overwrite existing run files in the save '
+                                                                       'directory.')
+    parser.set_defaults(driver_fxn=patch_i2s_run_header)
+
+
 def parse_copy_i2s_target_runfiles_args(parser):
     parser.description = 'Copy I2S input files from target directories to a single directory. If you need to create ' \
                          'run files for dates that do not have one from existing run files, see "make-runs".'
@@ -1635,6 +1706,9 @@ def parse_i2s_args(parser):
 
     make_one_runfile = subp.add_parser('make-one-run', help='Make one I2S run file')
     parse_make_one_i2s_runfile_args(make_one_runfile)
+
+    patch_runfiles = subp.add_parser('patch-runfiles', help='Patch header and slice/igram lists together')
+    parse_patch_i2s_runfiles(patch_runfiles)
 
     cp_runfiles = subp.add_parser('cp-runs', help='Copy target I2S run files to a single directory')
     parse_copy_i2s_target_runfiles_args(cp_runfiles)
