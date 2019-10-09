@@ -477,12 +477,14 @@ def patch_i2s_run_header(header_example_file, catalogue_files, save_dir, overwri
     def write_catalogue_by_param(robj, wobj):
         for param_num, _, value, _ in runutils.iter_i2s_input_params(robj, include_all_lines=False):
             if param_num >= catalogue_start:
-                wobj.write(value)
+                # strip whitespace to get rid of carriage returns and homogenize new lines
+                wobj.write(value.strip() + '\n')
 
     def write_catalogue_by_line(robj, wobj):
         for line_num, line in enumerate(robj, start=1):
             if line_num >= catalogue_start:
-                wobj.write(line)
+                # strip whitespace to get rid of carriage returns and homogenize new lines
+                wobj.write(line.decode('utf8').strip() + '\n')
 
     # First we need to collect all of the lines before the list of slices/igrams, which will be rewritten at the
     # beginning of each new file.
@@ -497,7 +499,8 @@ def patch_i2s_run_header(header_example_file, catalogue_files, save_dir, overwri
                 # If no comment we don't want a random colon at the end of the line
                 line = value
 
-            header_lines.append(line)
+            # strip whitespace to get rid of carriage returns and homogenize new lines
+            header_lines.append(line.strip() + '\n')
 
     logger.debug('{} header lines read from {}'.format(len(header_lines), header_example_file))
     # Now we loop over the files that have the slices/igrams and copy those lines into new files that use the header
@@ -1700,7 +1703,7 @@ def parse_check_i2s_link_args(parser):
 def parse_run_i2s_args(parser):
     parser.description = 'Run I2S in bulk for all target interferograms specified in a config file'
     parser.add_argument('cfg_file', help='The configuration file to use to drive the execution of I2S')
-    parser.add_argument('-n', '--n-procs', default=1, help='Number of processors to use to run I2S')
+    parser.add_argument('-n', '--n-procs', default=1, type=int, help='Number of processors to use to run I2S')
     parser.set_defaults(driver_fxn=run_all_i2s)
 
 
