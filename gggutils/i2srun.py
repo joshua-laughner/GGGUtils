@@ -438,7 +438,8 @@ def copy_i2s_run_files_from_target_dirs(dirs_list, save_dir, interactive='choice
 
 
 def patch_i2s_run_header(header_example_file, catalogue_files, save_dir, overwrite=False,
-                         last_header_param=runutils._default_last_header_param):
+                         last_new_header_param=runutils._default_last_header_param,
+                         catalogue_start=runutils._default_last_header_param+1):
     """
     Create new i2s run files by combining a header from one file with a catalogue of slices/igrams from other files
 
@@ -460,12 +461,34 @@ def patch_i2s_run_header(header_example_file, catalogue_files, save_dir, overwri
     :return: none, writes new files
     """
     header_lines = []
+    if isinstance(catalogue_start, str):
+        if catalogue_start.startswith('l'):
+            catalogue_by_line = True
+            catalogue_start = catalogue_start[1:]
+        else:
+            catalogue_by_line = False
+
+        catalogue_start = int(catalogue_start)
+    elif isinstance(catalogue_start, int):
+        catalogue_by_line = False
+    else:
+        raise TypeError('catalogue_start must be an int, a string interpretable as an int, that prepended with "l"')
+
+    def write_catalogue_by_param(robj, wobj):
+        for param_num, _, value, _ in runutils.iter_i2s_input_params(robj, include_all_lines=False):
+            if param_num >= catalogue_start:
+                wobj.write(value)
+
+    def write_catalogue_by_line(robj, wobj):
+        for line_num, line in enumerate(robj, start=1):
+            if line_num >= catalogue_start:
+                wobj.write(line)
 
     # First we need to collect all of the lines before the list of slices/igrams, which will be rewritten at the
     # beginning of each new file.
     with open(header_example_file, 'rb') as fobj:
         for param_num, _, value, comment, _ in runutils.iter_i2s_input_params(fobj, include_all_lines=True):
-            if param_num > last_header_param:
+            if param_num > last_new_header_param:
                 break
 
             if len(comment) > 0:
@@ -490,10 +513,10 @@ def patch_i2s_run_header(header_example_file, catalogue_files, save_dir, overwri
 
         with open(cat_file, 'rb') as robj, open(new_file, 'w') as wobj:
             wobj.writelines(header_lines)
-
-            for param_num, _, value, _ in runutils.iter_i2s_input_params(robj, include_all_lines=False):
-                if param_num > last_header_param:
-                    wobj.write(value)
+            if catalogue_by_line:
+                write_catalogue_by_line(robj, wobj)
+            else:
+                write_catalogue_by_param(robj, wobj)
 
 
 def add_slice_info_to_i2s_run_file(run_file, new_run_file=None, start_date=None, end_date=None, start_run=None,
@@ -1616,6 +1639,14 @@ def parse_patch_i2s_runfiles(parser):
     parser.add_argument('header_example_file', help='File to copy the header parameters from')
     parser.add_argument('save_dir', help='Directory to save the new files to.')
     parser.add_argument('catalogue_files', nargs='+', help='Files to copy the lists of slices/igrams from')
+    parser.add_argument('-c', '--catalogue-start', default=runutils._default_last_header_param,
+                        help='Controls where to start copying the catalogue of slices/igrams from the catalogue files. '
+                             'Given a number, e.g. "29", this indicates the parameter number to start copying the '
+                             'catalogue from. Alternately, specify a number prefixed with "l", e.g. "l239" to start '
+                             'copying from that line. The latter depends on all the catalogue files having the same '
+                             'number of header lines, but is necessary if copying from older versions of the run files '
+                             'that have a different number of lines for a given parameter (e.g. parameter 17 went from '
+                             'being one line to two between GGG2014 and GGG2019).')
     parser.add_argument('-o', '--overwrite', action='store_true', help='Overwrite existing run files in the save '
                                                                        'directory.')
     parser.set_defaults(driver_fxn=patch_i2s_run_header)
