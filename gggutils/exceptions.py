@@ -28,3 +28,15 @@ class GGGException(Exception):
 
 class GGGPathException(GGGException):
     pass
+
+
+class GGGDataException(GGGException):
+    pass
+
+
+class GGGInputException(GGGException):
+    pass
+
+
+class GGGLinkingException(GGGException):
+    pass

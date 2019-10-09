@@ -16,7 +16,7 @@ from textui import uielements
 
 from . import _i2s_halt_file
 from . import runutils, exceptions, target_utils, igram_analysis
-from .runutils import iter_i2s_dirs, load_config_file, _date_subdir, _get_date_cfg_option
+from .runutils import iter_i2s_dirs, load_config_file, date_subdir, get_date_cfg_option
 
 logger = getLogger('i2srun')
 
@@ -811,7 +811,7 @@ def link_i2s_input_files(cfg_file, overwrite=False, clean_links=False, clean_spe
         sect_cfg = cfg['Sites'][sect]
         logger.info('Linking files for {}'.format(sect))
         for datesect in sect_cfg.sections:
-            uses_slices = _get_date_cfg_option(sect_cfg, datestr=datesect, optname='slices')
+            uses_slices = get_date_cfg_option(sect_cfg, datestr=datesect, optname='slices')
 
             if not uses_slices:
                 logger.debug('Linking full igrams for {}'.format(datesect))
@@ -919,7 +919,7 @@ def _link_slices(cfg, site, datestr, i2s_opts, overwrite=False, clean_links=Fals
                                                          overwrite=overwrite,
                                                          clean_links=clean_links, clean_spectra=clean_spectra)
 
-    slices_need_org = _get_date_cfg_option(site_cfg, datestr, 'slices_in_subdir')
+    slices_need_org = get_date_cfg_option(site_cfg, datestr, 'slices_in_subdir')
     if slices_need_org:
         slice_files = sorted(glob(os.path.join(src_igm_dir, 'b*')))
 
@@ -1032,10 +1032,10 @@ def _link_common(cfg, site, datestr, i2s_opts, link_subdir, input_file_basename,
     :rtype: str, str, str
     """
     site_cfg = cfg['Sites'][site]
-    site_root_dir = _get_date_cfg_option(site_cfg, datestr=datestr, optname='site_root_dir')
-    no_date_dir = _get_date_cfg_option(site_cfg, datestr=datestr, optname='no_date_dir')
-    site_subdir = _get_date_cfg_option(site_cfg, datestr=datestr, optname='subdir')
-    i2s_input_file = _get_date_cfg_option(site_cfg, datestr=datestr, optname='i2s_input_file')
+    site_root_dir = get_date_cfg_option(site_cfg, datestr=datestr, optname='site_root_dir')
+    no_date_dir = get_date_cfg_option(site_cfg, datestr=datestr, optname='no_date_dir')
+    site_subdir = get_date_cfg_option(site_cfg, datestr=datestr, optname='subdir')
+    i2s_input_file = get_date_cfg_option(site_cfg, datestr=datestr, optname='i2s_input_file')
     # convert configobj.Section to dictionary and make a copy at the same time
     i2s_opts = {int(k): v for k, v in i2s_opts.items()}
 
@@ -1043,7 +1043,7 @@ def _link_common(cfg, site, datestr, i2s_opts, link_subdir, input_file_basename,
         src_igm_dir = os.path.abspath(os.path.join(site_root_dir, site_subdir))
     else:
         src_igm_dir = os.path.abspath(os.path.join(site_root_dir, datestr, site_subdir))
-    date_dir = _date_subdir(cfg, site, datestr)
+    date_dir = date_subdir(cfg, site, datestr)
     igms_dir = os.path.join(date_dir, link_subdir)
     if clean_links and os.path.exists(igms_dir):
         logger.info('Removing existing igrams directory: {}'.format(igms_dir))
@@ -1052,7 +1052,7 @@ def _link_common(cfg, site, datestr, i2s_opts, link_subdir, input_file_basename,
         os.makedirs(igms_dir)
 
     # Link the flimit file into the date dir with a consistent name to make setting up the input file easier
-    src_flimit = _get_date_cfg_option(site_cfg, datestr=datestr, optname='flimit_file')
+    src_flimit = get_date_cfg_option(site_cfg, datestr=datestr, optname='flimit_file')
     src_flimit = os.path.abspath(src_flimit)
     _make_link(src_flimit, os.path.join(date_dir, 'flimit.i2s'), overwrite=overwrite)
 
@@ -1184,7 +1184,7 @@ def check_i2s_links(cfg_file, dump_level=1):
         n_days = 0
         for datestr in site_sect.sections:
             n_days += 1
-            run_dir = _date_subdir(cfg, site, datestr)
+            run_dir = date_subdir(cfg, site, datestr)
             run_file = os.path.join(run_dir, 'slice-i2s.in')
             if not os.path.exists(run_file):
                 run_file = os.path.join(run_dir, 'opus-i2s.in')
@@ -1300,7 +1300,7 @@ def run_all_i2s(cfg_file, n_procs=1):
     for site in cfg['Sites'].sections:
         site_cfg = cfg['Sites'][site]
         for datestr in site_cfg.sections:
-            this_run_dir = _date_subdir(cfg, site, datestr)
+            this_run_dir = date_subdir(cfg, site, datestr)
             if n_procs > 1:
                 pool_args.append((this_run_dir, i2s_cmd))
             else:

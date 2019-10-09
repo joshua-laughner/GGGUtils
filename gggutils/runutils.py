@@ -302,15 +302,30 @@ def iter_target_dirs(cfg, incl_datestr=False):
     :return: iterable of target directory paths (as strings) and (if ``incl_datestr`` is ``True``) site date strings.
     """
     for site in cfg['Sites'].sections:
-        site_sect = cfg['Sites'][site]
-        for sitedate in cfg['Sites'][site].sections:
-            root_dir = _get_date_cfg_option(site_sect, sitedate, 'site_root_dir')
-            subdir = _get_date_cfg_option(site_sect, sitedate, 'subdir')
-            full_dir = os.path.join(root_dir, sitedate, subdir)
-            if incl_datestr:
-                yield full_dir, sitedate
-            else:
-                yield full_dir
+        for rvalues in iter_site_target_dirs(cfg['Sites'][site], incl_datestr=incl_datestr):
+            yield rvalues
+
+
+def iter_site_target_dirs(site_sect, incl_datestr=False):
+    """
+    Iterate over target data delivery directories for a single site
+
+    :param site_sect: the section of the config that is for the desired site
+
+    :param incl_datestr: if ``False`` (default), only the path to the target directory is returned. If ``True``, then
+     the site datestr (xxYYYYMMDD, e.g. ci20191008) is returned as the second value.
+    :type incl_datestr: bool
+
+    :return: iterable of target directory paths (as strings) and (if ``incl_datestr`` is ``True``) site date strings.
+    """
+    for sitedate in site_sect.sections:
+        root_dir = get_date_cfg_option(site_sect, sitedate, 'site_root_dir')
+        subdir = get_date_cfg_option(site_sect, sitedate, 'subdir')
+        full_dir = os.path.join(root_dir, sitedate, subdir)
+        if incl_datestr:
+            yield full_dir, sitedate
+        else:
+            yield full_dir
 
 
 def iter_i2s_dirs(cfg, incl_datestr=False):
@@ -327,13 +342,29 @@ def iter_i2s_dirs(cfg, incl_datestr=False):
     :return: iterable of run directory paths (as strings) and (if ``incl_datestr`` is ``True``) site date strings.
     """
     for site in cfg['Sites'].sections:
-        site_sect = cfg['Sites'][site]
-        for sitedate in cfg['Sites'][site].sections:
-            run_dir = _date_subdir(cfg, site, sitedate)
-            if incl_datestr:
-                yield run_dir, sitedate
-            else:
-                yield run_dir
+        for rvalues in iter_site_i2s_dirs(site, cfg, incl_datestr=incl_datestr):
+            yield rvalues
+
+
+def iter_site_i2s_dirs(site, cfg, incl_datestr=False):
+    """
+    Iterate over batch I2S run directories for a specific site
+
+    :param cfg: the configuration object that defines which run directories to use
+    :type cfg: :class:`configobj.ConfigObj`
+
+    :param incl_datestr: if ``False`` (default), only the path to the run directory is returned. If ``True``, then the
+     site datestr (xxYYYYMMDD, e.g. ci20191008) is returned as the second value.
+    :type incl_datestr: bool
+
+    :return: iterable of run directory paths (as strings) and (if ``incl_datestr`` is ``True``) site date strings.
+    """
+    for sitedate in cfg['Sites'][site].sections:
+        run_dir = date_subdir(cfg, site, sitedate)
+        if incl_datestr:
+            yield run_dir, sitedate
+        else:
+            yield run_dir
 
 
 def load_config_file(cfg_file):
@@ -384,7 +415,7 @@ def load_config_file(cfg_file):
     return cfg
 
 
-def _date_subdir(cfg, site, datestr):
+def date_subdir(cfg, site, datestr):
     """
     Return the path to the directory where a day's I2S will be run.
 
@@ -407,7 +438,7 @@ def _date_subdir(cfg, site, datestr):
     return os.path.join(run_top_dir, site_sect.name, datestr)
 
 
-def _get_date_cfg_option(site_cfg, datestr, optname):
+def get_date_cfg_option(site_cfg, datestr, optname):
     """
     Get a config option for a specific date, falling back on the general site option if not present
 
@@ -455,3 +486,7 @@ def _find_site_datekey(site_cfg, datestr):
             if k.endswith(datestr):
                 return k
         raise exceptions.SiteDateException('No key matching "{}" found in site "{}"'.format(datestr, site_cfg.name))
+
+
+def get_ggg_subpath(*dir_parts):
+    return os.path.join(os.path.expandvars('$GGGPATH'), *dir_parts)
