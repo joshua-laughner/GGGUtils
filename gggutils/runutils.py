@@ -306,7 +306,7 @@ def iter_target_dirs(cfg, incl_datestr=False):
             yield rvalues
 
 
-def iter_site_target_dirs(site_sect, incl_datestr=False):
+def iter_site_target_dirs(site_sect, incl_datestr=False, to_subdir=True):
     """
     Iterate over target data delivery directories for a single site
 
@@ -320,8 +320,12 @@ def iter_site_target_dirs(site_sect, incl_datestr=False):
     """
     for sitedate in site_sect.sections:
         root_dir = get_date_cfg_option(site_sect, sitedate, 'site_root_dir')
-        subdir = get_date_cfg_option(site_sect, sitedate, 'subdir')
-        full_dir = os.path.join(root_dir, sitedate, subdir)
+        if to_subdir:
+            subdir = get_date_cfg_option(site_sect, sitedate, 'subdir')
+            full_dir = os.path.join(root_dir, sitedate, subdir)
+        else:
+            full_dir = os.path.join(root_dir, sitedate)
+
         if incl_datestr:
             yield full_dir, sitedate
         else:

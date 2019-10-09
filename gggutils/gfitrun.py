@@ -77,8 +77,10 @@ def create_slice_target_site_runlogs(cfg_file, clean_spectrum_links='ask'):
     # Step 2: Use that list to create a new sunrun for all the days
     #
     # Step 3: Use that sunrun to create a single runlog for all the days
+    import pdb; pdb.set_trace()
     cfg = runutils.load_config_file(cfg_file)
-    for site, site_cfg in cfg['Sites'].sections.items():
+    for site in cfg['Sites'].sections:
+        site_cfg = cfg['Sites'][site]
         if not site_cfg['slices']:
             logger.debug('{} does not use slices, skipping'.format(site))
             continue
@@ -99,20 +101,22 @@ def create_opus_target_site_runlogs(cfg_file, clean_spectrum_links='ask'):
     #
     # Step 3: Call create_runlog to make per-day runlogs, then concatenate each site's runlogs into a single runlog
     # (clean up the per-day runlogs). Add these runlogs to $GGGPATH/runlogs/gnd/runlogs.men file
+    import pdb; pdb.set_trace()
     cfg = runutils.load_config_file(cfg_file)
-    for site, site_cfg in cfg['Sites'].sections.items():
+    for site in cfg['Sites'].sections:
+        site_cfg = cfg['Sites'][site]
         if site_cfg['slices']:
             logger.debug('{} uses slices, skipping'.format(site))
             continue
 
-        sunrun_files = _copy_delivered_sunruns(site_cfg)
+        sunrun_files = _copy_delivered_sunruns(site, cfg)
         site_all_spectra_dir = _link_site_spectra(site, cfg, clean_links=clean_spectrum_links)
         _add_dir_to_data_part(site_all_spectra_dir)
         runlogs = _create_individual_date_runlogs(sunrun_files)
         _concate_runlogs(runlogs, site)
 
 
-def _copy_delivered_sunruns(site_cfg):
+def _copy_delivered_sunruns(site, cfg):
     def find_sunrun(tar_dir):
         possible_files = glob(os.path.join(tar_dir, '*.gop'))
         if len(possible_files) == 1:
@@ -124,13 +128,21 @@ def _copy_delivered_sunruns(site_cfg):
 
     sunrun_dir = runutils.get_ggg_subpath('sunruns', 'gnd')
     sunrun_files = []
+    site_cfg = cfg['Sites'][site]
 
-    for target_dir, date_str in runutils.iter_site_target_dirs(site_cfg, incl_datestr=True):
-        spectrum_dir = os.path.join(target_dir, 'spectra')
+    for target_dir, date_str in runutils.iter_site_target_dirs(site_cfg, incl_datestr=True, to_subdir=False):
+        run_dir = runutils.date_subdir(cfg, site, date_str)
+        spectrum_dir = os.path.join(run_dir, 'spectra')
         spectra_files = set(os.listdir(spectrum_dir))
+        nspectra = len(spectra_files)
         spectra_missing = []
 
-        delivered_sunrun = find_sunrun(target_dir)
+        try:
+            delivered_sunrun = find_sunrun(target_dir)
+        except GGGInputException as err:
+            logger.warning('Skipping {}: {}'.format(date_str, err))
+            continue
+
         nheader = mod_utils.get_num_header_lines(delivered_sunrun)
         new_name = date_str + '.gop'
         sunrun_files.append(new_name)
@@ -138,12 +150,14 @@ def _copy_delivered_sunruns(site_cfg):
         new_name = os.path.join(sunrun_dir, new_name)
 
         # Copy line by line, checking if the spectrum file listed is available in our new spectra directory
+        nsunrun_spec = 0
         with open(delivered_sunrun, 'r') as robj, open(new_name, 'w') as wobj:
             for i, line in enumerate(robj):
                 if i < nheader:
                     wobj.write(line)
                 else:
                     line_spec_file = line.split()[0]
+                    nsunrun_spec += 1
                     if line_spec_file in spectra_files:
                         spectra_files.remove(line_spec_file)
                         wobj.write(line)
@@ -151,13 +165,13 @@ def _copy_delivered_sunruns(site_cfg):
                         spectra_missing.append(line_spec_file)
 
         if len(spectra_missing) > 0:
-            msg = '{}: {} spectra included in the sunrun were missing from {}:\n  * {}'.format(
-                date_str, len(spectra_missing), spectrum_dir, '\n  * '.join(spectra_missing)
+            msg = '{}: {}/{} spectra included in the sunrun were missing from {}:\n  * {}'.format(
+                date_str, len(spectra_missing), nsunrun_spec, spectrum_dir, '\n  * '.join(spectra_missing)
             )
             logger.debug(msg)
         if len(spectra_files) > 0:
-            msg = '{}: {} spectra present in {} were not listed in the sunrun:\n  * {}'.format(
-                date_str, len(spectra_files), spectrum_dir, '\n  * '.join(spectra_missing)
+            msg = '{}: {}/{} spectra present in {} were not listed in the sunrun:\n  * {}'.format(
+                date_str, len(spectra_files), nspectra, spectrum_dir, '\n  * '.join(spectra_files)
             )
             logger.debug(msg)
 
@@ -173,7 +187,7 @@ def _link_site_spectra(site, cfg, clean_links='ask'):
     links_present = glob(os.path.join(link_dir, '*'))
     if len(links_present) > 0:
         if clean_links == 'ask':
-            user_response = input('Links already exist in {}. Remove them [yN]: ')
+            user_response = input('Links already exist in {}. Remove them [yN]: '.format(link_dir))
             clean_links = user_response.lower() == 'y'
 
         if clean_links:
@@ -196,6 +210,10 @@ def _link_site_spectra(site, cfg, clean_links='ask'):
 
 def _add_dir_to_data_part(new_dir, add_to_list_data_part=False):
     def add_line_to_file(filename):
+        nonlocal new_dir
+        if not new_dir.endswith(os.sep):
+            new_dir += os.sep
+
         with open(data_part, 'r') as robj:
             for line in robj:
                 if line.strip() == new_dir:
@@ -244,10 +262,12 @@ def _create_individual_date_runlogs(sunruns, delete_sunruns=False):
 
 
 def _concate_runlogs(runlogs, site_id, delete_date_runlogs=False):
+    runlog_dir = runutils.get_ggg_subpath('runlogs', 'gnd')
     combined_runlog = runutils.get_ggg_subpath('runlogs', 'gnd', '{}_targets.grl'.format(site_id))
     first_runlog = True
     with open(combined_runlog, 'w') as wobj:
         for this_runlog in runlogs:
+            this_runlog = os.path.join(runlog_dir, this_runlog)
             nheader = mod_utils.get_num_header_lines(this_runlog)
             with open(this_runlog, 'r') as robj:
                 for line_num, line in enumerate(robj):
@@ -326,4 +346,4 @@ def parse_gfit_args(parser: ArgumentParser):
     parse_slice_runlog_args(make_slice_runlogs)
 
     make_opus_runlogs = subp.add_parser('make-opus-runlogs', aliases=['mor'], help='Make runlogs for igram sites')
-    parse_slice_runlog_args(make_opus_runlogs)
+    parse_opus_runlog_args(make_opus_runlogs)
