@@ -282,29 +282,29 @@ def _concate_runlogs(runlogs, site_id, delete_date_runlogs=False):
 
 
 def _make_spectra_list(all_spectra_dir, site):
-    def remove_ext(spectrum):
-        return os.path.basename(spectrum).split('.')[0]
-
     list_dir = runutils.get_ggg_subpath('lists')
+
     if not os.path.exists(list_dir):
         os.mkdir(list_dir)
+        
     list_file = os.path.join(list_dir, '{}_targets.gnd'.format(site))
 
     # the s means solar (avoids lamp runs), the a means the InGaAs detector
     ingaas_spectra = sorted(glob(os.path.join(all_spectra_dir, '??????????s????a.*')))
+
     if len(ingaas_spectra) == 0:
         raise GGGInputException('No spectra in {}'.format(all_spectra_dir))
 
-    spectrum_noext = os.path.basename(ingaas_spectra[0].split('.')[0])
-    first_spectrum = remove_ext(ingaas_spectra[0]) + '.001'
-    last_spectrum = remove_ext(ingaas_spectra[-1])[:-1] + 'b.999'
+    # These should already be in chronological order, so we just need to interleave the "b" detector files
+    # The shell script on the wiki doesn't check that the b files exist so I'm going to assume that there should
+    # always be a "b" file for every "a" file for now.
+    with open(list_file, 'w') as wobj:
+        for spectrum in ingaas_spectra:
+            spectrum = os.path.basename(spectrum)
+            wobj.write(spectrum + '\n')
+            b_spectrum = re.sub(r'a(?=\.)', 'b', spectrum)
+            wobj.write(b_spectrum + '\n')
 
-    make_list_cmd = runutils.get_ggg_subpath('bin', 'list_maker')
-    proc = subprocess.Popen([make_list_cmd], cwd=list_dir, stdin=subprocess.PIPE)
-    proc.communicate('{}\n{}\n'.format(first_spectrum, last_spectrum).encode('ascii'))
-    proc.wait()
-
-    os.rename(os.path.join(list_dir, 'list_maker.out'), list_file)
     return list_file
 
 
