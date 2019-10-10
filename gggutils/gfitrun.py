@@ -234,11 +234,15 @@ def _link_site_spectra(site, cfg, clean_links='ask'):
         for spectrum in site_spectra_files:
             link_name = os.path.join(link_dir, spectrum)
             source_name = os.path.join(site_spectrum_dir, spectrum)
-            logger.debug('Linking {} -> {}'.format(link_name, source_name))
+            #logger.debug('Linking {} -> {}'.format(link_name, source_name))
+            n_not_linked = 0
             if not os.path.exists(link_name):
                 os.symlink(source_name, link_name)
             else:
-                logger.debug('{} already exists, not linking'.format(link_name))
+                n_not_linked += 1
+
+        if n_not_linked > 0:
+            logger.info('{} files not linked to {} because they already exist'.format(n_not_linked, link_dir))
 
     return link_dir
 
@@ -336,7 +340,8 @@ def _make_spectra_list(all_spectra_dir, site):
             spectrum = os.path.basename(spectrum)
             wobj.write(spectrum + '\n')
             b_spectrum = re.sub(r'a(?=\.)', 'b', spectrum)
-            wobj.write(b_spectrum + '\n')
+            if os.path.exists(os.path.join(all_spectra_dir, b_spectrum)):
+                wobj.write(b_spectrum + '\n')
 
     return list_file
 
@@ -367,7 +372,10 @@ def run_gsetup(cfg_file, overwrite=False):
 
         os.mkdir(gfit_exec_dir)
         logger.info('Running gsetup in {}'.format(gfit_exec_dir))
-        _run_one_gsetup(exec_dir=gfit_exec_dir, site=site, level_menu_number=level_menu_number)
+        try:
+            _run_one_gsetup(exec_dir=gfit_exec_dir, site=site, level_menu_number=level_menu_number)
+        except GGGMenuError as err:
+            logger.warning('Skipping {}: {}'.format(site, err))
 
 
 def _run_one_gsetup(exec_dir, site, level_menu_number):
