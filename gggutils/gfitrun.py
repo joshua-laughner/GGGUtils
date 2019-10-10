@@ -4,6 +4,7 @@ from glob import glob
 from logging import getLogger
 import os
 import re
+import shutil
 import subprocess
 import sys
 
@@ -11,7 +12,7 @@ from ginput.mod_maker import tccon_sites
 from ginput.common_utils import mod_utils
 
 from . import runutils
-from .exceptions import GGGInputException, GGGLinkingException
+from .exceptions import GGGInputException, GGGMenuError
 
 logger = getLogger('gfitrun')
 
@@ -108,7 +109,7 @@ def create_runlogs_from_scratch(cfg_file, clean_spectrum_links='ask', do_slice_s
         except GGGInputException as err:
             logger.warning('Skipping {}: {}'.format(site, err))
             continue
-            
+
         runlog_file = _create_individual_date_runlogs([sunrun_file])[0]
 
 
@@ -144,6 +145,10 @@ def create_runlogs_from_delivered_sunruns(cfg_file, clean_spectrum_links='ask'):
         runlogs = _create_individual_date_runlogs(sunrun_files)
         _concate_runlogs(runlogs, site)
 
+
+########################################
+# Helper functions for runlog creation #
+########################################
 
 def _copy_delivered_sunruns(site, cfg):
     def find_sunrun(tar_dir):
@@ -336,6 +341,66 @@ def _make_spectra_list(all_spectra_dir, site):
     return list_file
 
 
+##################
+# Running gsetup #
+##################
+
+def run_gsetup(cfg_file, overwrite=False):
+    # 1. Loop through the sites (not the dates - we've made each site a single runlog)
+    # 2. Make a gfit-exec directory in that site's run directory. Clear out if exists.
+    # 3. Run gsetup in that directory, passing in the answers via Popen.communicate so that it executes automatically
+
+    cfg = runutils.load_config_file(cfg_file)
+    level_menu_number = _get_menu_number(runutils.get_ggg_subpath('levels', 'levels.men'), 'ap_51_level_0_to_70km.gnd')
+
+    for site in cfg['Sites'].sections:
+        run_top_dir = cfg['Run']['run_top_dir']
+        site_top_dir = os.path.join(run_top_dir, site)
+        gfit_exec_dir = os.path.join(site_top_dir, 'gfit-exec')
+        if os.path.exists(gfit_exec_dir):
+            if not overwrite:
+                logger.warning('Not running for {} because gfit-exec already exists'.format(site))
+                continue
+            else:
+                logger.warning('Deleting {}'.format(gfit_exec_dir))
+                shutil.rmtree(gfit_exec_dir)
+
+        os.mkdir(gfit_exec_dir)
+        logger.info('Running gsetup in {}'.format(gfit_exec_dir))
+        _run_one_gsetup(exec_dir=gfit_exec_dir, site=site, level_menu_number=level_menu_number)
+
+
+def _run_one_gsetup(exec_dir, site, level_menu_number):
+    gsetup_exec = runutils.get_ggg_subpath('bin', 'gsetup')
+    runlog_name = '{}_targets.grl'.format(site)
+    runlog_menu_number = _get_menu_number(runutils.get_ggg_subpath('runlogs', 'gnd', 'runlogs.men'), runlog_name)
+    # The answers to gsetup's questions: geometry (g = ground), runlog, levels, windows (1 = tccon), and standard
+    # TCCON processing (y = yes, use the FPIT .vmr/.mod files)
+    gsetup_answers = 'g\n{rl}\n{lev}\n1\ny\n'.format(rl=runlog_menu_number, lev=level_menu_number).encode('ascii')
+    proc = subprocess.Popen([gsetup_exec], cwd=exec_dir, stdin=subprocess.PIPE)
+    proc.communicate(gsetup_answers)
+    proc.wait()
+
+
+def _get_menu_number(menu_file, menu_value):
+    with open(menu_file, 'r') as mobj:
+        for line_num, line in enumerate(mobj):
+            if line_num == 0:
+                # first line is always a header
+                continue
+
+            elif menu_value in line:
+                return line_num
+
+    raise GGGMenuError('Could not find a line matching "{}" in the {} menu'.format(
+        menu_value, os.path.basename(menu_file)
+    ))
+
+
+########################
+# Command-line parsing #
+########################
+
 def parse_prior_infile_args(parser: ArgumentParser):
     parser.description = 'Generate PyAutoMod input files for the desired target dates specified in a config file'
     parser.add_argument('cfg_file', help='The I2S/GFIT-run config file that specifies the target sites and dates to run')
@@ -377,6 +442,15 @@ def parse_delivered_runlog_args(parser: ArgumentParser):
     parser.set_defaults(driver_fxn=create_runlogs_from_delivered_sunruns, clean_spectrum_links='ask')
 
 
+def parse_gsetup_args(parser: ArgumentParser):
+    parser.description = 'Run gsetup for all the target sites'
+    parser.add_argument('cfg_file', help='Config file that specifies the sites to run gsetup for')
+    parser.add_argument('-o', '--overwrite', action='store_true',
+                        help='If the directory where gsetup needs to execute exists, overwrite it. Be careful, '
+                             'since this will wipe out previous gfit runs done in that directory.')
+    parser.set_defaults(driver_fxn=run_gsetup)
+
+
 def parse_gfit_args(parser: ArgumentParser):
     subp = parser.add_subparsers()
     make_infiles = subp.add_parser('make-request-files', aliases=['mrf'], help='Make PyAutoMod request files')
@@ -389,3 +463,6 @@ def parse_gfit_args(parser: ArgumentParser):
     make_opus_runlogs = subp.add_parser('make-runlogs-from-delivered', aliases=['makerundel'],
                                         help='Make runlogs from delivered sunruns.')
     parse_delivered_runlog_args(make_opus_runlogs)
+
+    run_gsetup_p = subp.add_parser('run-gsetup', help='Run gsetup for target sites')
+    parse_gsetup_args(run_gsetup_p)

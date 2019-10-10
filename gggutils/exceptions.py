@@ -40,3 +40,7 @@ class GGGInputException(GGGException):
 
 class GGGLinkingException(GGGException):
     pass
+
+
+class GGGMenuError(GGGException):
+    pass
