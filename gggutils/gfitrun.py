@@ -70,7 +70,18 @@ def make_automod_input_files(cfg_file, output_path, email, overwrite=True):
                 wobj.write(email)
 
 
-def create_slice_target_site_runlogs(cfg_file, clean_spectrum_links='ask'):
+def create_runlogs_from_scratch(cfg_file, clean_spectrum_links='ask', do_slice_sites=True, do_opus_sites=True):
+    """
+    Create runlogs and sunruns for sites from scratch.
+
+    Requires that there be a ??_sunrun.dat file for the site in $GGGPATH/tccon.
+
+    :param cfg_file:
+    :param clean_spectrum_links:
+    :param do_slice_sites:
+    :param do_opus_sites:
+    :return:
+    """
     # Step 1: link all site spectra files into one directory, create a single list of all of them. Add this directory
     # to both .lst files
     #
@@ -80,22 +91,38 @@ def create_slice_target_site_runlogs(cfg_file, clean_spectrum_links='ask'):
     cfg = runutils.load_config_file(cfg_file)
     for site in cfg['Sites'].sections:
         site_cfg = cfg['Sites'][site]
-        if not site_cfg['slices']:
-            logger.debug('{} does not use slices, skipping'.format(site))
+        uses_slices = site_cfg['slices']
+
+        if not do_slice_sites and uses_slices:
+            logger.debug('{} uses slices and do_slice_sites is False, skipping'.format(site))
+            continue
+        if not do_opus_sites and not uses_slices:
+            logger.debug('{} does not use slices and do_opus_sites is False, skipping'.format(site))
             continue
 
         site_all_spectra_dir = _link_site_spectra(site, cfg, clean_links=clean_spectrum_links)
         _add_dir_to_data_part(site_all_spectra_dir, add_to_list_data_part=True)
         try:
             list_file = _make_spectra_list(site_all_spectra_dir, site)
+            sunrun_file = _create_sunrun(list_file, site)
         except GGGInputException as err:
             logger.warning('Skipping {}: {}'.format(site, err))
             continue
-        sunrun_file = _create_sunrun(list_file, site)
+            
         runlog_file = _create_individual_date_runlogs([sunrun_file])[0]
 
 
-def create_opus_target_site_runlogs(cfg_file, clean_spectrum_links='ask'):
+def create_runlogs_from_delivered_sunruns(cfg_file, clean_spectrum_links='ask'):
+    """
+    Create runlogs from sunrun files delivered as part of OCO2 targets.
+
+    Can only potentially be used for sites that use OPUS igrams because the numbering of spectra derived from slices
+    will likely be different between the delivered sunrun and our sunrun.
+
+    :param cfg_file:
+    :param clean_spectrum_links:
+    :return:
+    """
     # Step 1: copy sunruns (with appropriate names) into $GGGPATH/sunruns/gnd. Remove spectra from the sunrun that we
     # didn't generate and note spectra that we generated that aren't in the sunrun
     #
@@ -195,8 +222,6 @@ def _link_site_spectra(site, cfg, clean_links='ask'):
         if clean_links:
             for f in links_present:
                 os.remove(f)
-        else:
-            raise GGGLinkingException('Links already exist in {} and clean_links was False'.format(link_dir))
 
     for site_dir in runutils.iter_site_i2s_dirs(site, cfg):
         site_spectrum_dir = os.path.join(site_dir, 'spectra')
@@ -205,7 +230,10 @@ def _link_site_spectra(site, cfg, clean_links='ask'):
             link_name = os.path.join(link_dir, spectrum)
             source_name = os.path.join(site_spectrum_dir, spectrum)
             logger.debug('Linking {} -> {}'.format(link_name, source_name))
-            os.symlink(source_name, link_name)
+            if not os.path.exists(link_name):
+                os.symlink(source_name, link_name)
+            else:
+                logger.debug('{} already exists, not linking'.format(link_name))
 
     return link_dir
 
@@ -286,7 +314,7 @@ def _make_spectra_list(all_spectra_dir, site):
 
     if not os.path.exists(list_dir):
         os.mkdir(list_dir)
-        
+
     list_file = os.path.join(list_dir, '{}_targets.gnd'.format(site))
 
     # the s means solar (avoids lamp runs), the a means the InGaAs detector
@@ -319,7 +347,7 @@ def parse_prior_infile_args(parser: ArgumentParser):
     parser.set_defaults(driver_fxn=make_automod_input_files)
 
 
-def parse_slice_runlog_args(parser: ArgumentParser):
+def parse_scratch_runlog_args(parser: ArgumentParser):
     parser.description = 'Generate runlogs for targets that use slices'
     parser.add_argument('cfg_file', help='Config file that specifies the sites to make runlogs for. May include sites '
                                          'that do not use slices, they will be skipped.')
@@ -328,12 +356,16 @@ def parse_slice_runlog_args(parser: ArgumentParser):
                              'already, this will cause the links to be deleted. The default behavior is to ask.')
     parser.add_argument('--no-clean-links', action='store_false', dest='clean_spectrum_links',
                         help='If the directory that all the site spectra are to be linked to exists and has links '
-                             'already, this will cause the job to abort.')
-    parser.set_defaults(driver_fxn=create_slice_target_site_runlogs, clean_spectrum_links='ask')
+                             'already, it will create any missing links.')
+    parser.add_argument('--no-slice-sites', dest='do_slice_sites', action='store_false',
+                        help='Do not run sites that use slices')
+    parser.add_argument('--no-opus-sites', dest='do_opus_sites', action='store_false',
+                        help='Do not run sites that use opus igrams')
+    parser.set_defaults(driver_fxn=create_runlogs_from_scratch, clean_spectrum_links='ask')
 
 
-def parse_opus_runlog_args(parser: ArgumentParser):
-    parser.description = 'Generate runlogs for targets that use opus igrams'
+def parse_delivered_runlog_args(parser: ArgumentParser):
+    parser.description = 'Generate runlogs from delivered sunruns'
     parser.add_argument('cfg_file', help='Config file that specifies the sites to make runlogs for. May include sites '
                                          'that do use slices, they will be skipped.')
     parser.add_argument('--clean-links', action='store_true', dest='clean_spectrum_links',
@@ -341,8 +373,8 @@ def parse_opus_runlog_args(parser: ArgumentParser):
                              'already, this will cause the links to be deleted. The default behavior is to ask.')
     parser.add_argument('--no-clean-links', action='store_false', dest='clean_spectrum_links',
                         help='If the directory that all the site spectra are to be linked to exists and has links '
-                             'already, this will cause the job to abort.')
-    parser.set_defaults(driver_fxn=create_opus_target_site_runlogs, clean_spectrum_links='ask')
+                             'already, it will create any missing links.')
+    parser.set_defaults(driver_fxn=create_runlogs_from_delivered_sunruns, clean_spectrum_links='ask')
 
 
 def parse_gfit_args(parser: ArgumentParser):
@@ -350,8 +382,10 @@ def parse_gfit_args(parser: ArgumentParser):
     make_infiles = subp.add_parser('make-request-files', aliases=['mrf'], help='Make PyAutoMod request files')
     parse_prior_infile_args(make_infiles)
 
-    make_slice_runlogs = subp.add_parser('make-slice-runlogs', aliases=['msr'], help='Make runlogs for slice sites')
-    parse_slice_runlog_args(make_slice_runlogs)
+    make_slice_runlogs = subp.add_parser('make-runlogs', aliases=['makerun'], help='Make sunruns and runlogs from '
+                                                                                   'scratch.')
+    parse_scratch_runlog_args(make_slice_runlogs)
 
-    make_opus_runlogs = subp.add_parser('make-opus-runlogs', aliases=['mor'], help='Make runlogs for igram sites')
-    parse_opus_runlog_args(make_opus_runlogs)
+    make_opus_runlogs = subp.add_parser('make-runlogs-from-delivered', aliases=['makerundel'],
+                                        help='Make runlogs from delivered sunruns.')
+    parse_delivered_runlog_args(make_opus_runlogs)
