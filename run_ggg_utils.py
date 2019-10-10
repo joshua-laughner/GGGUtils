@@ -17,7 +17,7 @@ def parse_args():
     i2srun.parse_i2s_args(i2sp)
 
     gfitp = subp.add_parser('gfit', help='GFIT related commands')
-    gfitrun.parse_gfit_args(gfitp)
+    gfitrun.parse_all_gfit_args(gfitp)
 
     args = vars(p.parse_args())
     return args

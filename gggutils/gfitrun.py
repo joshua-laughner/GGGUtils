@@ -2,8 +2,10 @@ from argparse import ArgumentParser
 import datetime as dt
 from glob import glob
 from logging import getLogger
+from multiprocessing import Pool
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -11,13 +13,13 @@ import sys
 from ginput.mod_maker import tccon_sites
 from ginput.common_utils import mod_utils
 
-from . import runutils
+from . import runutils, _etc_dir
 from .exceptions import GGGInputException, GGGMenuError
 
 logger = getLogger('gfitrun')
 
 _sunrun_header_lines = 4
-
+_gfit_abort_file = os.path.join(_etc_dir, 'abort-gfit')
 
 # Ensure that we do not use Python 2 style input
 if sys.version_info.major < 3:
@@ -359,9 +361,7 @@ def run_gsetup(cfg_file, overwrite=False):
     level_menu_number = _get_menu_number(runutils.get_ggg_subpath('levels', 'levels.men'), 'ap_51_level_0_to_70km.gnd')
 
     for site in cfg['Sites'].sections:
-        run_top_dir = cfg['Run']['run_top_dir']
-        site_top_dir = os.path.join(run_top_dir, site)
-        gfit_exec_dir = os.path.join(site_top_dir, 'gfit-exec')
+        gfit_exec_dir = _gfit_exec_dir_path(cfg, site)
         if os.path.exists(gfit_exec_dir):
             if not overwrite:
                 logger.warning('Not running for {} because gfit-exec already exists'.format(site))
@@ -376,6 +376,12 @@ def run_gsetup(cfg_file, overwrite=False):
             _run_one_gsetup(exec_dir=gfit_exec_dir, site=site, level_menu_number=level_menu_number)
         except GGGMenuError as err:
             logger.warning('Skipping {}: {}'.format(site, err))
+
+
+def _gfit_exec_dir_path(cfg, site):
+    run_top_dir = cfg['Run']['run_top_dir']
+    site_top_dir = os.path.join(run_top_dir, site)
+    return os.path.join(site_top_dir, 'gfit-exec')
 
 
 def _run_one_gsetup(exec_dir, site, level_menu_number):
@@ -403,6 +409,52 @@ def _get_menu_number(menu_file, menu_value):
     raise GGGMenuError('Could not find a line matching "{}" in the {} menu'.format(
         menu_value, os.path.basename(menu_file)
     ))
+
+
+################
+# Running Gfit #
+################
+
+def run_gfit(cfg_file, nprocs=1):
+    cfg = runutils.load_config_file(cfg_file)
+    gfit_exec_dirs = []
+    for site in cfg['Sites'].sections:
+        gfit_exec_dirs.append(_gfit_exec_dir_path(cfg, site))
+
+    if nprocs <= 1:
+        for exec_dir in gfit_exec_dirs:
+            _run_one_gfit(exec_dir)
+    else:
+        with Pool(processes=nprocs) as pool:
+            pool.map(_run_one_gfit, gfit_exec_dirs)
+
+    if os.path.exists(_gfit_abort_file):
+        os.remove(_gfit_abort_file)
+
+
+def _run_one_gfit(exec_dir):
+    log_name = 'run_gfit_{}.log'.format(dt.datetime.now().strftime('%Y%m%dT%H%M%S'))
+    with open(os.path.join(exec_dir, 'multiggg.sh')) as robj, open(os.path.join(exec_dir, log_name)) as logobj:
+        for line in robj:
+            # multiggg.sh redirects output to /dev/null, we want to save to a log file
+            cmd = line.split('>')[0]
+            cmd = shlex.split(cmd)
+
+            if _should_gfit_abort():
+                logger.debug('GFIT abort file found. Not running in {}'.format(exec_dir))
+                return
+
+            logger.info('Running {window} in {execdir}'.format(window=cmd[1], execdir=exec_dir))
+            subprocess.check_call(cmd, stdout=logobj, cwd=exec_dir)
+
+
+def make_gfit_abort_file():
+    with open(_gfit_abort_file, 'w') as wobj:
+        wobj.write('GFIT told to abort at {}'.format(dt.datetime.now()))
+
+
+def _should_gfit_abort():
+    return os.path.exists(_gfit_abort_file)
 
 
 ########################
@@ -459,7 +511,20 @@ def parse_gsetup_args(parser: ArgumentParser):
     parser.set_defaults(driver_fxn=run_gsetup)
 
 
-def parse_gfit_args(parser: ArgumentParser):
+def parse_run_gfit_args(parser: ArgumentParser):
+    parser.description = 'Run gfit for all the target sites'
+    parser.add_argument('cfg_file', help='Config file that specifics the sites to run gfit on')
+    parser.add_argument('-n', '--nprocs', default=1, type=int,
+                        help='Number of processors to use. NOTE: The parallelized over sites, not windows.')
+    parser.set_defaults(driver_fxn=run_gfit)
+
+
+def parse_stop_gfit_args(parser: ArgumentParser):
+    parser.description = 'Abort a gfit run after the current windows are finished'
+    parser.set_defaults(driver_fxn=make_gfit_abort_file)
+
+
+def parse_all_gfit_args(parser: ArgumentParser):
     subp = parser.add_subparsers()
     make_infiles = subp.add_parser('make-request-files', aliases=['mrf'], help='Make PyAutoMod request files')
     parse_prior_infile_args(make_infiles)
@@ -474,3 +539,9 @@ def parse_gfit_args(parser: ArgumentParser):
 
     run_gsetup_p = subp.add_parser('run-gsetup', help='Run gsetup for target sites')
     parse_gsetup_args(run_gsetup_p)
+
+    run_gfit_p = subp.add_parser('run-gfit', help='Run gfit for target sites')
+    parse_run_gfit_args(run_gfit_p)
+
+    stop_gfit = subp.add_parser('stop-gfit', help='Stop a running gfit job')
+    parse_stop_gfit_args(stop_gfit)
