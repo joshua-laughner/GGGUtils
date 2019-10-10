@@ -77,7 +77,6 @@ def create_slice_target_site_runlogs(cfg_file, clean_spectrum_links='ask'):
     # Step 2: Use that list to create a new sunrun for all the days
     #
     # Step 3: Use that sunrun to create a single runlog for all the days
-    import pdb; pdb.set_trace()
     cfg = runutils.load_config_file(cfg_file)
     for site in cfg['Sites'].sections:
         site_cfg = cfg['Sites'][site]
@@ -87,7 +86,11 @@ def create_slice_target_site_runlogs(cfg_file, clean_spectrum_links='ask'):
 
         site_all_spectra_dir = _link_site_spectra(site, cfg, clean_links=clean_spectrum_links)
         _add_dir_to_data_part(site_all_spectra_dir, add_to_list_data_part=True)
-        list_file = _make_spectra_list(site_all_spectra_dir, site)
+        try:
+            list_file = _make_spectra_list(site_all_spectra_dir, site)
+        except GGGInputException as err:
+            logger.warning('Skipping {}: {}'.format(site, err))
+            continue
         sunrun_file = _create_sunrun(list_file, site)
         runlog_file = _create_individual_date_runlogs([sunrun_file])[0]
 
@@ -101,7 +104,6 @@ def create_opus_target_site_runlogs(cfg_file, clean_spectrum_links='ask'):
     #
     # Step 3: Call create_runlog to make per-day runlogs, then concatenate each site's runlogs into a single runlog
     # (clean up the per-day runlogs). Add these runlogs to $GGGPATH/runlogs/gnd/runlogs.men file
-    import pdb; pdb.set_trace()
     cfg = runutils.load_config_file(cfg_file)
     for site in cfg['Sites'].sections:
         site_cfg = cfg['Sites'][site]
@@ -214,10 +216,10 @@ def _add_dir_to_data_part(new_dir, add_to_list_data_part=False):
         if not new_dir.endswith(os.sep):
             new_dir += os.sep
 
-        with open(data_part, 'r') as robj:
+        with open(filename, 'r') as robj:
             for line in robj:
                 if line.strip() == new_dir:
-                    logger.debug('data_part.lst already contains {}, not adding'.format(new_dir))
+                    logger.debug('{} already contains {}, not adding'.format(filename, new_dir))
                     return
 
         with open(filename, 'a') as wobj:
@@ -225,7 +227,7 @@ def _add_dir_to_data_part(new_dir, add_to_list_data_part=False):
                 # ensure there's a newline at the end of the file so that we don't add our new directory to an
                 # existing line
                 wobj.write('\n')
-            logger.debug('Adding {} to data_part.lst'.format(new_dir))
+            logger.debug('Adding {} to {}'.format(new_dir, filename))
             wobj.write(new_dir + '\n')
 
     data_part = runutils.get_ggg_subpath('config', 'data_part.lst')
@@ -280,6 +282,9 @@ def _concate_runlogs(runlogs, site_id, delete_date_runlogs=False):
 
 
 def _make_spectra_list(all_spectra_dir, site):
+    def remove_ext(spectrum):
+        return os.path.basename(spectrum).split('.')[0]
+
     list_dir = runutils.get_ggg_subpath('lists')
     if not os.path.exists(list_dir):
         os.mkdir(list_dir)
@@ -287,13 +292,16 @@ def _make_spectra_list(all_spectra_dir, site):
 
     # the s means solar (avoids lamp runs), the a means the InGaAs detector
     ingaas_spectra = sorted(glob(os.path.join(all_spectra_dir, '??????????s????a.*')))
-    spectrum_noext = ingaas_spectra[0].split('.')[0]
-    first_spectrum = spectrum_noext + '.001'
-    last_spectrum = spectrum_noext[:-1] + 'b.999'
+    if len(ingaas_spectra) == 0:
+        raise GGGInputException('No spectra in {}'.format(all_spectra_dir))
+
+    spectrum_noext = os.path.basename(ingaas_spectra[0].split('.')[0])
+    first_spectrum = remove_ext(ingaas_spectra[0]) + '.001'
+    last_spectrum = remove_ext(ingaas_spectra[-1])[:-1] + 'b.999'
 
     make_list_cmd = runutils.get_ggg_subpath('bin', 'list_maker')
-    proc = subprocess.Popen([make_list_cmd], cwd=list_dir)
-    proc.communicate('{}\n{}\n'.format(first_spectrum, last_spectrum))
+    proc = subprocess.Popen([make_list_cmd], cwd=list_dir, stdin=subprocess.PIPE)
+    proc.communicate('{}\n{}\n'.format(first_spectrum, last_spectrum).encode('ascii'))
     proc.wait()
 
     os.rename(os.path.join(list_dir, 'list_maker.out'), list_file)
