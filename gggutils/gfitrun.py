@@ -434,7 +434,12 @@ def run_gfit(cfg_file, nprocs=1):
 
 def _run_one_gfit(exec_dir):
     log_name = 'run_gfit_{}.log'.format(dt.datetime.now().strftime('%Y%m%dT%H%M%S'))
-    with open(os.path.join(exec_dir, 'multiggg.sh')) as robj, open(os.path.join(exec_dir, log_name)) as logobj:
+    multiggg = os.path.join(exec_dir, 'multiggg.sh')
+    if not os.path.exists(multiggg):
+        logger.warning('Cannot run GFIT in {}, no multiggg.sh'.format(exec_dir))
+        return 
+
+    with open(os.path.join(exec_dir, 'multiggg.sh')) as robj, open(os.path.join(exec_dir, log_name), 'w') as logobj:
         for line in robj:
             # multiggg.sh redirects output to /dev/null, we want to save to a log file
             cmd = line.split('>')[0]
@@ -445,7 +450,10 @@ def _run_one_gfit(exec_dir):
                 return
 
             logger.info('Running {window} in {execdir}'.format(window=cmd[1], execdir=exec_dir))
-            subprocess.check_call(cmd, stdout=logobj, cwd=exec_dir)
+            try:
+                subprocess.check_call(cmd, stdout=logobj, cwd=exec_dir)
+            except subprocess.CalledProcessError:
+                logger.error('GFIT errored on {window} in {execdir}'.format(window=cmd[1], execdir=exec_dir))
 
 
 def make_gfit_abort_file():
