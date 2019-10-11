@@ -417,43 +417,53 @@ def _get_menu_number(menu_file, menu_value):
 
 def run_gfit(cfg_file, nprocs=1):
     cfg = runutils.load_config_file(cfg_file)
-    gfit_exec_dirs = []
+    gfit_args = []
     for site in cfg['Sites'].sections:
-        gfit_exec_dirs.append(_gfit_exec_dir_path(cfg, site))
+        gfit_exec_dir = _gfit_exec_dir_path(cfg, site)
+        for window in _iter_gfit_windows(gfit_exec_dir):
+            gfit_args.append((gfit_exec_dir, window))
 
     if nprocs <= 1:
-        for exec_dir in gfit_exec_dirs:
-            _run_one_gfit(exec_dir)
+        for args in gfit_args:
+            _run_one_window(*args)
     else:
         with Pool(processes=nprocs) as pool:
-            pool.map(_run_one_gfit, gfit_exec_dirs)
+            pool.starmap(_run_one_window, gfit_args)
 
     if os.path.exists(_gfit_abort_file):
         os.remove(_gfit_abort_file)
 
 
-def _run_one_gfit(exec_dir):
-    log_name = 'run_gfit_{}.log'.format(dt.datetime.now().strftime('%Y%m%dT%H%M%S'))
+def _iter_gfit_windows(exec_dir):
+
     multiggg = os.path.join(exec_dir, 'multiggg.sh')
     if not os.path.exists(multiggg):
         logger.warning('Cannot run GFIT in {}, no multiggg.sh'.format(exec_dir))
         return 
 
-    with open(os.path.join(exec_dir, 'multiggg.sh')) as robj, open(os.path.join(exec_dir, log_name), 'w') as logobj:
+    with open(os.path.join(exec_dir, 'multiggg.sh')) as robj:
         for line in robj:
-            # multiggg.sh redirects output to /dev/null, we want to save to a log file
-            cmd = line.split('>')[0]
-            cmd = shlex.split(cmd)
+            # multiggg.sh redirects output to /dev/null, we need to separate that redirect
+            window = line.split('>')[0].split()[1]
+            yield window
 
-            if _should_gfit_abort():
-                logger.debug('GFIT abort file found. Not running in {}'.format(exec_dir))
-                return
 
-            logger.info('Running {window} in {execdir}'.format(window=cmd[1], execdir=exec_dir))
-            try:
-                subprocess.check_call(cmd, stdout=logobj, cwd=exec_dir)
-            except subprocess.CalledProcessError:
-                logger.error('GFIT errored on {window} in {execdir}'.format(window=cmd[1], execdir=exec_dir))
+def _run_one_window(exec_dir, window):
+    gggcmd = runutils.get_ggg_subpath('bin', 'gfit')
+    cmd = [gggcmd, window]
+
+    if _should_gfit_abort():
+        logger.debug('GFIT abort file found. Not running {} in {}'.format(window, exec_dir))
+        return
+
+    logger.info('Running {window} in {execdir}'.format(window=window, execdir=exec_dir))
+    log_name = '{}.log'.format(window
+                               )
+    with open(os.path.join(exec_dir, log_name), 'w') as logobj:
+        try:
+            subprocess.check_call(cmd, stdout=logobj, cwd=exec_dir)
+        except subprocess.CalledProcessError:
+            logger.error('GFIT errored on {window} in {execdir}'.format(window=cmd[1], execdir=exec_dir))
 
 
 def make_gfit_abort_file():
@@ -522,7 +532,7 @@ def parse_gsetup_args(parser: ArgumentParser):
 def parse_run_gfit_args(parser: ArgumentParser):
     parser.description = 'Run gfit for all the target sites'
     parser.add_argument('cfg_file', help='Config file that specifics the sites to run gfit on')
-    parser.add_argument('-n', '--nprocs', default=1, type=int,
+    parser.add_argument('-j', '--nprocs', default=1, type=int,
                         help='Number of processors to use. NOTE: The parallelized over sites, not windows.')
     parser.set_defaults(driver_fxn=run_gfit)
 
