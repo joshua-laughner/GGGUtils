@@ -1,4 +1,5 @@
 import datetime as dt
+from glob import glob
 from logging import getLogger
 import ntpath
 import os
@@ -494,3 +495,18 @@ def _find_site_datekey(site_cfg, datestr):
 
 def get_ggg_subpath(*dir_parts):
     return os.path.join(os.path.expandvars('$GGGPATH'), *dir_parts)
+
+
+def find_by_glob(pattern: str) -> str:
+    """
+    Find exactly one file matching a pattern.
+
+    :param pattern: a glob-style pattern to match to find the desired file.
+    :return: the path to the matching file, if found
+    :raises IOError: if 0 or 2+ files found.
+    """
+    files = glob(pattern)
+    if len(files) == 1:
+        return files[0]
+    else:
+        raise IOError('{} files matching {} found'.format(len(files), pattern))

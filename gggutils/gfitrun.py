@@ -417,7 +417,7 @@ def _get_menu_number(menu_file, menu_value):
 # Running Gfit #
 ################
 
-def run_gfit(cfg_file, nprocs=1):
+def run_gfit(cfg_file, nprocs=1, suppress_spt=True):
     cfg = runutils.load_config_file(cfg_file)
     gfit_args = []
     for site in cfg['Sites'].sections:
@@ -436,7 +436,7 @@ def run_gfit(cfg_file, nprocs=1):
         os.remove(_gfit_abort_file)
 
 
-def _iter_gfit_windows(exec_dir):
+def _iter_gfit_windows(exec_dir, suppress_spt=True):
 
     multiggg = os.path.join(exec_dir, 'multiggg.sh')
     if not os.path.exists(multiggg):
@@ -447,6 +447,9 @@ def _iter_gfit_windows(exec_dir):
         for line in robj:
             # multiggg.sh redirects output to /dev/null, we need to separate that redirect
             window = line.split('>')[0].split()[1]
+            if suppress_spt:
+                ggg_file = _ggg_file_name(exec_dir, window)
+                _change_ggg_file(ggg_file)
             yield window
 
 
@@ -466,9 +469,39 @@ def _run_one_window(exec_dir, window):
     log_name = '{}.log'.format(window)
     with open(os.path.join(exec_dir, log_name), 'w') as logobj:
         try:
-            subprocess.check_call(cmd, stdout=logobj, cwd=exec_dir)
+            subprocess.check_call(cmd, stdout=logobj, stderr=logobj, cwd=exec_dir)
         except subprocess.CalledProcessError:
             logger.error('GFIT errored on {window} in {execdir}'.format(window=cmd[1], execdir=exec_dir))
+
+
+def _ggg_file_name(exec_dir, window):
+    return runutils.find_by_glob(os.path.join(exec_dir, '{}.*.ggg'.format(window)))
+
+
+def _change_ggg_file(gggfile):
+    with open(gggfile, 'r') as robj:
+        ggglines = robj.readlines()
+
+    for iline, line in enumerate(ggglines):
+        if '{sep}ak{sep}'.format(sep=os.sep) in line:
+            ggglines[iline] = './ak/k\n'
+        elif '{sep}spt{sep}'.format(sep=os.sep) in line:
+            # putting a 0 at the end of the line tells it to save no spectral fits.
+            # Debra will also organize her fits into subdirectories by window so that they don't overwrite each other,
+            # but I mainly don't want them written at all.
+            ggglines[iline] = './spt/z 0\n'
+
+    with open(gggfile, 'w') as wobj:
+        wobj.writelines(ggglines)
+
+    # Make the "ak" and "spt" subdirs just in case gfit will stop if they are missing
+    run_dir = os.path.dirname(gggfile)
+    ak_dir = os.path.join(run_dir, 'ak')
+    if not os.path.exists(ak_dir):
+        os.mkdir(ak_dir)
+    spt_dir = os.path.join(run_dir, 'spt')
+    if not os.path.exists(spt_dir):
+        os.mkdir(spt_dir)
 
 
 def make_gfit_abort_file():
@@ -539,6 +572,9 @@ def parse_run_gfit_args(parser: ArgumentParser):
     parser.add_argument('cfg_file', help='Config file that specifics the sites to run gfit on')
     parser.add_argument('-j', '--nprocs', default=1, type=int,
                         help='Number of processors to use. NOTE: The parallelized over sites, not windows.')
+    parser.add_argument('-w', '--no-change-ggg-files', dest='suppress_spt', action='store_false',
+                        help='By default, this runner will change your .ggg files to prevent writing spectral fit '
+                             'files to your $GGGPATH. This option disables that behavior.')
     parser.set_defaults(driver_fxn=run_gfit)
 
 

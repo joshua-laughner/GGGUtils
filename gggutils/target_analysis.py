@@ -8,6 +8,8 @@ import re
 from typing import Sequence, Union
 
 from ginput.common_utils import mod_utils
+
+from .runutils import find_by_glob
 from .exceptions import TimeMatchError
 
 
@@ -39,20 +41,7 @@ _abbrev_to_subdir = {'ae': 'Ascension',
                      'tk': 'Tsukuba',
                      'wg': 'Wollongong'}
 
-
-def find_by_glob(pattern: str) -> str:
-    """
-    Find exactly one file matching a pattern.
-
-    :param pattern: a glob-style pattern to match to find the desired file.
-    :return: the path to the matching file, if found
-    :raises IOError: if 0 or 2+ files found.
-    """
-    files = glob(pattern)
-    if len(files) == 1:
-        return files[0]
-    else:
-        raise IOError('{} files matching {} found'.format(len(files), pattern))
+all_sites = tuple(_abbrev_to_subdir.keys())
 
 
 def read_eof_csv(csv_file: str) -> pd.DataFrame:
