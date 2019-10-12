@@ -1,4 +1,4 @@
-from datetime import timedelta as tdel, datetime as dtime
+from datetime import timedelta as tdel
 from glob import glob
 import numpy as np
 import pandas as pd

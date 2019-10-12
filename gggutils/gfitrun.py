@@ -513,6 +513,27 @@ def _should_gfit_abort():
     return os.path.exists(_gfit_abort_file)
 
 
+##################################################
+# Flexible function to run a command in all dirs #
+##################################################
+
+def run_in_all_dirs(cfg_file, cmd, subdir='.', logfile=None, exclude=tuple()):
+    cfg = runutils.load_config_file(cfg_file)
+    cmd = shlex.split(cmd)
+    for site in cfg['Sites'].sections:
+        if site in exclude:
+            logger.debug('Skipping {} due to exclude argument'.format(site))
+        run_top_dir = cfg['Run']['run_top_dir']
+        site_top_dir = os.path.join(run_top_dir, site)
+        working_dir = os.path.join(site_top_dir, subdir)
+        logger.info('Running "{}" in {}'.format(' '.join(cmd), working_dir))
+        if logfile is None:
+            subprocess.check_call(cmd, cwd=working_dir)
+        else:
+            with open(os.path.join(working_dir, logfile), 'w') as logobj:
+                subprocess.check_call(cmd, cwd=working_dir, stdout=logobj, stderr=logobj)
+
+
 ########################
 # Command-line parsing #
 ########################
@@ -583,6 +604,22 @@ def parse_stop_gfit_args(parser: ArgumentParser):
     parser.set_defaults(driver_fxn=make_gfit_abort_file)
 
 
+def parse_run_cmd_args(parser: ArgumentParser):
+    def comma_list(value):
+        return value.split(',')
+
+    parser.description = 'Run an arbitrary command in a subdirectory of each target directory'
+    parser.add_argument('cfg_file', help='Config file that specifics the site directories to run in')
+    parser.add_argument('cmd', help='The command to run in each subdirectory')
+    parser.add_argument('subdir', nargs='?', default='.', help='Subdirectory within each site directory to work in. '
+                                                               'Default is the top directory.')
+    parser.add_argument('-l', '--logfile', default=None,
+                        help='File to log the STDOUT and STDERR from the command to. Path is relative to the directory '
+                             'run in.')
+    parser.add_argument('-e', '--exclude', default=[], type=comma_list,
+                        help='Comma-separated list of site abbreviations to exclude')
+
+
 def parse_all_gfit_args(parser: ArgumentParser):
     subp = parser.add_subparsers()
     make_infiles = subp.add_parser('make-request-files', aliases=['mrf'], help='Make PyAutoMod request files')
@@ -604,3 +641,6 @@ def parse_all_gfit_args(parser: ArgumentParser):
 
     stop_gfit = subp.add_parser('stop-gfit', help='Stop a running gfit job')
     parse_stop_gfit_args(stop_gfit)
+
+    run_cmd = subp.add_parser('exec', help='Run an arbitrary command in every site directory')
+    parse_run_cmd_args(run_cmd)
