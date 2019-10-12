@@ -44,3 +44,7 @@ class GGGLinkingException(GGGException):
 
 class GGGMenuError(GGGException):
     pass
+
+
+class TimeMatchError(Exception):
+    pass
