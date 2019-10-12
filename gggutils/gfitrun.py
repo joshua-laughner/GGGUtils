@@ -4,11 +4,13 @@ from glob import glob
 from logging import getLogger
 from multiprocessing import Pool
 import os
+import random
 import re
 import shlex
 import shutil
 import subprocess
 import sys
+import time
 
 from ginput.mod_maker import tccon_sites
 from ginput.common_utils import mod_utils
@@ -456,9 +458,12 @@ def _run_one_window(exec_dir, window):
         logger.debug('GFIT abort file found. Not running {} in {}'.format(window, exec_dir))
         return
 
-    logger.info('Running {window} in {execdir}'.format(window=window, execdir=exec_dir))
-    log_name = '{}.log'.format(window
-                               )
+    delay = random.randint(0, 32)
+    logger.info('Running {window} in {execdir} in {delay} s'.format(window=window, execdir=exec_dir, delay=delay))
+    # This should delay different jobs by different numbers of seconds to avoid all of them
+    # thrashing the disks at once.
+    time.sleep(delay)
+    log_name = '{}.log'.format(window)
     with open(os.path.join(exec_dir, log_name), 'w') as logobj:
         try:
             subprocess.check_call(cmd, stdout=logobj, cwd=exec_dir)
