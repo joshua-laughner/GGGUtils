@@ -519,19 +519,23 @@ def _should_gfit_abort():
 
 def run_in_all_dirs(cfg_file, cmd, subdir='.', logfile=None, exclude=tuple()):
     cfg = runutils.load_config_file(cfg_file)
-    cmd = shlex.split(cmd)
     for site in cfg['Sites'].sections:
         if site in exclude:
             logger.debug('Skipping {} due to exclude argument'.format(site))
+            continue
+        cmd_list = shlex.split(cmd.format(site=site))
         run_top_dir = cfg['Run']['run_top_dir']
         site_top_dir = os.path.join(run_top_dir, site)
         working_dir = os.path.join(site_top_dir, subdir)
-        logger.info('Running "{}" in {}'.format(' '.join(cmd), working_dir))
+        if not os.path.isdir(working_dir):
+            logger.warning('{} does not exist, skipping'.format(working_dir))
+            continue
+        logger.info('Running "{}" in {}'.format(' '.join(cmd_list), working_dir))
         if logfile is None:
-            subprocess.check_call(cmd, cwd=working_dir)
+            subprocess.run(cmd_list, cwd=working_dir)
         else:
             with open(os.path.join(working_dir, logfile), 'w') as logobj:
-                subprocess.check_call(cmd, cwd=working_dir, stdout=logobj, stderr=logobj)
+                subprocess.run(cmd_list, cwd=working_dir, stdout=logobj, stderr=logobj)
 
 
 ########################
@@ -610,7 +614,8 @@ def parse_run_cmd_args(parser: ArgumentParser):
 
     parser.description = 'Run an arbitrary command in a subdirectory of each target directory'
     parser.add_argument('cfg_file', help='Config file that specifics the site directories to run in')
-    parser.add_argument('cmd', help='The command to run in each subdirectory')
+    parser.add_argument('cmd', help='The command to run in each subdirectory. {site} will be replaced with the site '
+                                    'abbreviation.')
     parser.add_argument('subdir', nargs='?', default='.', help='Subdirectory within each site directory to work in. '
                                                                'Default is the top directory.')
     parser.add_argument('-l', '--logfile', default=None,
@@ -618,6 +623,7 @@ def parse_run_cmd_args(parser: ArgumentParser):
                              'run in.')
     parser.add_argument('-e', '--exclude', default=[], type=comma_list,
                         help='Comma-separated list of site abbreviations to exclude')
+    parser.set_defaults(driver_fxn=run_in_all_dirs)
 
 
 def parse_all_gfit_args(parser: ArgumentParser):
