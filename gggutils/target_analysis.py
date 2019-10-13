@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import os
 import re
+from scipy import stats
 
 from typing import Sequence, Union
 
@@ -267,3 +268,72 @@ def recalc_x(df: pd.DataFrame, xname: str, scale: float) -> pd.Series:
     colname = 'column_{}{}'.format(specie, old_or_new)
     o2name = 'column_o2{}'.format(old_or_new)
     return df[colname] / df[o2name] * 0.2095 * scale
+
+
+##################
+# ADCF Functions #
+##################
+
+def read_adcf_file(adcf_file: str) -> pd.DataFrame:
+    """
+    Read an airmass-dependent corrections file created by `derive_airmass_correction`
+    :param adcf_file: the path to the ADCF file
+    :return: a dataframe of the airmass corrections, indexed by date.
+    """
+    def _make_timestamp(ser):
+        return pd.Timestamp(int(ser.year), 1, 1) + pd.Timedelta(days=ser.doy - 1)
+
+    nhead = mod_utils.get_num_header_lines(adcf_file)
+    df = pd.read_csv(adcf_file, header=nhead-1, sep='\s+')
+    df['adcf'] = compute_adcf(df, remove_outliers=False)
+    return df.set_index(df.apply(_make_timestamp, axis=1))
+
+
+def iter_adcf_files(sites: Sequence[str], gas: str, ignore_missing: bool = False) -> (str, pd.DataFrame):
+    """
+    Iterate over the ADCF files for a list of sites for a specific gas
+    :param sites: a sequence of site abbreviations
+    :param gas: the gas name, must match the dac_xx_targets.vav_<gas>.out file name
+    :param ignore_missing: whether to error or skip sites that do not have a ADCF file.
+    :return: iteration over the site abbreviations and the corresponding data frames
+    """
+    for site in sites:
+        pp_dir = os.path.join(_test_root_dir, site, 'postproc')
+        gas_adcf_file = os.path.join(pp_dir, 'dac_{site}_targets.vav_{gas}.out'.format(site=site, gas=gas))
+        try:
+            df = read_adcf_file(gas_adcf_file)
+        except FileNotFoundError:
+            if ignore_missing:
+                print('Cannot find an ADCF file for {}'.format(site))
+            else:
+                raise
+        else:
+            yield site, df
+
+
+def compute_adcf(df, remove_outliers=False) -> pd.Series:
+    """
+    Compute airmass dependent correction factors for a given dataframe
+
+    :param df: a dataframe resulting from reading in an ADCF file.
+    :param remove_outliers: whether or not to remove outliers, defined as points with a z-score >= 2.
+    :return: the airmass dependence correction factors as a series
+    """
+    adcf = df.sdc / df.ybar
+    if remove_outliers:
+        xx = stats.zscore(adcf) < 2
+        adcf = adcf[xx]
+
+    return adcf
+
+
+def load_all_adcfs(sites: Sequence[str], gas: str, ignore_missing: bool = True) -> pd.DataFrame:
+    total_df = None
+    for site, site_df in iter_adcf_files(sites, gas, ignore_missing=ignore_missing):
+        site_df['site'] = site
+        if total_df is None:
+            total_df = site_df
+        else:
+            total_df = pd.concat([total_df, site_df])
+
+    return total_df

@@ -19,7 +19,8 @@ def plot_xluft_comparison(site_abbrevs: Sequence[str], qual_filter: str = 'both'
     :param qual_filter: how to quality filter Xluft. See :func:`match_test_to_delivered_data`.
     :param plot_type: what type of plot to make. "scatter" will create a single panel scatter plot comparing the old and
      new Xluft values, colored by site. "hist" will make a two panel plot, with site-by-site histograms of old and new
-     Xluft on the left and overall Xluft on the right. "sep
+     Xluft on the left and overall Xluft on the right. "sephist" will make a three panel plot, with old and new Xluft
+     in separate panels.
     :param calc_x:
     :return:
     """
