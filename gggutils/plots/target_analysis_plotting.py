@@ -10,7 +10,7 @@ plt.rcParams['font.size'] = 12
 
 
 def plot_xluft_comparison(site_abbrevs: Sequence[str], qual_filter: str = 'both', plot_type: str = 'scatter',
-                          calc_x: bool = True):
+                          calc_x: bool = True, **match_kws):
     """
     Plot a comparision of Xluft between two GGG versions.
 
@@ -44,7 +44,7 @@ def plot_xluft_comparison(site_abbrevs: Sequence[str], qual_filter: str = 'both'
     xluft_old_all = np.array([])
     xluft_new_all = np.array([])
     for isite, site in enumerate(site_abbrevs):
-        combo_df = match_test_to_delivered_by_site(site, do_qual_filter=qual_filter)
+        combo_df = match_test_to_delivered_by_site(site, do_qual_filter=qual_filter, **match_kws)
 
         if calc_x:
             xluft_old = recalc_x(combo_df, 'xluft_old', 1)
