@@ -147,7 +147,7 @@ _def_req_cols = ('flag', 'date', 'column_o2', 'xluft', 'column_luft', 'xco2_ppm'
 
 
 def match_test_to_delivered_data(site_abbrev: str, new_eof_csv_file: str, req_columns: Sequence[str] = _def_req_cols,
-                                 max_timedelta: Union[tdel, pd.Timedelta] = pd.Timedelta(seconds=5),
+                                 max_timedelta: Union[tdel, pd.Timedelta] = pd.Timedelta(seconds=3),
                                  do_qual_filter: str = 'none') -> pd.DataFrame:
     """
     Create a single dataframe containing data from both old (delivered) .eof.csv files and a new .eof.csv file
@@ -243,6 +243,25 @@ def match_test_to_delivered_by_site(site_abbrev: str, **kwargs) -> pd.DataFrame:
     """
     new_eof_csv_file = find_by_glob(os.path.join(_test_root_dir, site_abbrev, 'postproc', '*eof.csv'))
     return match_test_to_delivered_data(site_abbrev, new_eof_csv_file, **kwargs)
+
+
+def match_test_to_delivered_multi_site(site_abbrevs: Sequence[str], **kwargs) -> pd.DataFrame:
+    """
+    Load old and new .eof.csv files for many sites
+    :param site_abbrevs: list of two letter site abbreviations
+    :param kwargs: keyword arguments for :func:`match_test_to_delivered_data`
+    :return: a dataframe of all sites concatentated together
+    """
+    total_df = None
+    for site in site_abbrevs:
+        df = match_test_to_delivered_by_site(site, **kwargs)
+        df['site'] = site
+        if total_df is None:
+            total_df = df
+        else:
+            total_df = pd.concat([total_df, df])
+
+    return total_df
 
 
 def recalc_x(df: pd.DataFrame, xname: str, scale: float) -> pd.Series:
