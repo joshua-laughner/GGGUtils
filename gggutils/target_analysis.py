@@ -346,9 +346,28 @@ def compute_adcf(df, remove_outliers=False) -> pd.Series:
     return adcf
 
 
-def load_all_adcfs(sites: Sequence[str], gas: str, ignore_missing: bool = True) -> pd.DataFrame:
+def load_all_adcfs(sites: Sequence[str], gas: str, ignore_missing: bool = True, req_num_spectra: int = 200) -> pd.DataFrame:
+    """
+    Load all ADCF files
+
+    :param sites: sequence of site abbrevations indicating the sites to load
+    :param gas: string indicating which gas to load, much match the name in the "dac*" file
+    :param ignore_missing: if ``True``, any sites for which a DAC file cannot be found will just be skipped. If
+     ``False``, an error is raised in that case.
+    :param req_num_spectra: minimum number of good spectra required for a day to be included in the ADCF dataframe. If
+     a day doesn't have enough spectra on either side of solar noon, then the ADCF will not be reliable.
+    :return: a dataframe containing the ADCF data.
+    """
     total_df = None
     for site, site_df in iter_adcf_files(sites, gas, ignore_missing=ignore_missing):
+        if req_num_spectra > 0:
+            # Read the .eof.csv file to get the number of spectra per day that are good
+            eof_df = read_eof_csv(find_by_glob(os.path.join(_test_root_dir, site, 'postproc', '*.eof.csv')))
+            xx_dates = pd.Series(False, index=site_df.index)
+            for date in site_df.index:
+                xx_eof = (eof_df.year == date.year) & (eof_df.day == date.dayofyear)
+                xx_dates[date] = (eof_df[xx_eof].flag == 0).sum() > req_num_spectra
+            site_df = site_df[xx_dates]
         site_df['site'] = site
         if total_df is None:
             total_df = site_df
