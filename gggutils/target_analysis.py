@@ -356,3 +356,63 @@ def load_all_adcfs(sites: Sequence[str], gas: str, ignore_missing: bool = True) 
             total_df = pd.concat([total_df, site_df])
 
     return total_df
+
+
+def calc_delta_x(df: pd.DataFrame, xquantity: str, recalc_raw: bool = False, recalc_scale: float = 1.0,
+                 check_times: bool = True, hour_key=None, sza_key=None) -> pd.DataFrame:
+    """
+    Create a dataframe with a given quantity calculated relative to local noon
+    
+    :param df: a dataframe containing the desired quantity, hour, and asza_deg columns. If the desired quantity
+     is suffixed with "_old" or "_new", the hour and sza column names must be as well.
+    :param xquantity: the X-quantity (e.g. Xluft, XCO2) to calculate as a delta. 
+    :param recalc_raw: if ``True``, the X-quantity is calculated from column_<quantity> and column_o2, which must also have the 
+     matching "_old" or "_new" suffixes if relevant.
+    :param recalc_scale: if ``recalc_raw`` is ``True``, pass the multiplicative scale for the recalculated X-quantity
+     as this parameter.
+    :param check_times: ensure that hour monotonically increases along the dataframe. Set to ``False`` to disable this check.
+    :param hour_key: key to use to find the hour of day. If not given, it is assumed to be "hour", suffixed by "_old" or 
+     "_new" if the ``xquantity`` was.
+    :param sza_key: key to use to find the SZA. If not given, it is assumed to be "asza_deg", suffixed by "_old" or 
+     "_new" if the ``xquantity`` was.
+    :return: a new dataframe with the x-quantity, delta x-quantity, hours from local noon, and solar zenith angle. "_old"
+     and "_new" suffixes are removed.
+    """
+    old_or_new = re.search(r'_(old|new)', xquantity)
+    if old_or_new is None:
+        old_or_new = ''
+    else:
+        old_or_new = old_or_new.group()
+        
+    if hour_key is None:
+        hour_key = 'hour' + old_or_new
+    if sza_key is None:
+        sza_key = 'asza_deg' + old_or_new
+    
+    # Check that the hour is monotonically increasing. If not, we probably have 
+    # multiple days, which isn't allowed
+    if check_times and (np.diff(df[hour_key]) < 0).any():
+        raise ValueError('{} decreases at least once. This may be because the dataframe passed in contains multiple days, which is not permitted.')
+        
+    # Find the minimum solar zenith angle - that's solar noon
+    noon_idx = df[sza_key].idxmin()
+    
+    # Get the x-quantity to calculate the delta of
+    if recalc_raw:
+        xdata = tgts.recalc_x(df, xquantity, scale=recalc_scale)
+    else:
+        xdata = df[xquantity]
+        
+    # Make a data frame to hold the original quantity, the delta quantity, the hour from local noon,
+    # and the solar zenith angle.
+    delta_df = pd.DataFrame(index=df.index)
+    xname_out = xquantity.replace(old_or_new, '')
+    if recalc_raw:
+        xname_out = xname_out + '_raw'
+    delta_xname = 'delta_' + xname_out
+        
+    delta_df[xname_out] = xdata
+    delta_df[delta_xname] = xdata - xdata[noon_idx]
+    delta_df['delta_hours'] = df[hour_key] - df[hour_key][noon_idx]
+    delta_df['asza_deg'] = df[sza_key]
+    return delta_df
