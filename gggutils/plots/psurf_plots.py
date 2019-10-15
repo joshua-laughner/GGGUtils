@@ -60,53 +60,81 @@ def save_pout_timeseries(all_matched_eofs: pd.DataFrame, mod_psurfs: pd.DataFram
     """
     gggvers = 'GGG2014' if old_or_new == 'old' else 'GGGNext'
 
-    pout_range = (700, 1100)
+
 
     with PdfPages(os.path.join(save_dir, '{}_pout_timeseries.pdf'.format(gggvers.lower()))) as pdf:
         for site, site_df in all_matched_eofs.groupby('site'):
             print('On', gggvers, site)
-            fig = plt.figure()
-            ndays = len(site_df.groupby(['year_new', 'day_new']))
-            ny = ndays // 2 + ndays % 2
 
-            # Get the min/max pressure ranges we'll want for this site
-            pout_minmax = (site_df.pout_hPa_new.min(), site_df.pout_hPa_new.max())
-            xx_site = mod_psurfs.site == site
-            psurf_minmax = (mod_psurfs[xx_site].psurf.min(), mod_psurfs[xx_site].psurf.max())
-            site_p_range = (
-            np.floor(min(pout_minmax[0], psurf_minmax[0])) - 2, np.ceil(max(pout_minmax[1], psurf_minmax[1])) + 2)
-
-            iday = 0
-            for (year, doy), day_df in site_df.groupby(['year_new', 'day_new']):
-                xx_psurf = (mod_psurfs.year == year) & (mod_psurfs.day == doy) & (mod_psurfs.site == site)
-                mod_psurfs_sub = mod_psurfs[xx_psurf]
-                this_date = pd.Timestamp(int(year), 1, 1) + pd.Timedelta(days=doy - 1)
-                iday += 1
-                ax = fig.add_subplot(ny, 2, iday)
-
-                ax.plot(day_df.date_new, day_df.pout_hPa_new, linestyle='none', marker='.', color='b', label='Pout')
-                ax.plot(mod_psurfs_sub.index, mod_psurfs_sub.psurf, linestyle='none', marker='P', markersize=12,
-                        color='r', label='FPIT')
-                ax.plot(day_df.date_new, day_df.fpit_surfp, linestyle='none', marker='.', color='orange',
-                        label='interp. FPIT')
-
-                ax.grid()
-                ax.legend()
-
-                plt.xticks(rotation=45)
-                ax.set_ylabel('Surface pressure (hPa)')
-                ax.set_title('{}: {}'.format(site, this_date.strftime('%Y-%m-%d')))
-                # ax.set_xlim(*hour_range)
-                if fix_ylim == 'global':
-                    ax.set_ylim(pout_range)
-                elif fix_ylim == 'by-site':
-                    ax.set_ylim(site_p_range)
-
-            fig.set_size_inches(16, 4 * ny)
-            plt.subplots_adjust(hspace=0.4)
 
             pdf.savefig(fig, bbox_inches='tight')
             plt.close(fig)
 
         info = pdf.infodict()
         info['Title'] = '{} FPIT surf. pres. vs. pout timeseries of OCO-2 targets'.format(gggvers)
+
+
+def plot_one_site_pout_timeser(site_df: pd.DataFrame, mod_psurfs: pd.DataFrame, ytype: str = 'abs',
+                               fix_ylim: str = 'by-site'):
+    try:
+        site = site_df.site.unique().item()
+    except ValueError:  # .item() returns a ValueError if there's not a single element
+        raise ValueError('The "site" column has >1 unique value in ``site_df``, this is not permitted')
+
+    fig = plt.figure()
+    ndays = len(site_df.groupby(['year_new', 'day_new']))
+    ny = ndays // 2 + ndays % 2
+
+    pout_range = (700, 1100)  # used if fix_ylim == 'global'
+
+    # Get the min/max pressure ranges we'll want for this site
+    xx_site = mod_psurfs.site == site
+    if ytype == 'abs':
+        pout_minmax = (site_df.pout_hPa_new.min(), site_df.pout_hPa_new.max())
+        psurf_minmax = (mod_psurfs[xx_site].psurf.min(), mod_psurfs[xx_site].psurf.max())
+        site_p_range = (
+            np.floor(min(pout_minmax[0], psurf_minmax[0])) - 2, np.ceil(max(pout_minmax[1], psurf_minmax[1])) + 2
+        )
+    elif ytype == 'delta':
+        pout_min = (site_df.pout_hPa_new - site_df.fpit_surfp).min()
+        pout_max = (site_df.pout_hPa_new - site_df.fpit_surfp).max()
+        site_p_range = (pout_min, pout_max)
+    else:
+        raise NotImplementedError('ytype "{}" not implemented'.format(ytype))
+
+    iday = 0
+    for (year, doy), day_df in site_df.groupby(['year_new', 'day_new']):
+        xx_psurf = (mod_psurfs.year == year) & (mod_psurfs.day == doy) & (mod_psurfs.site == site)
+        mod_psurfs_sub = mod_psurfs[xx_psurf]
+        this_date = pd.Timestamp(int(year), 1, 1) + pd.Timedelta(days=doy - 1)
+        iday += 1
+        ax = fig.add_subplot(ny, 2, iday)
+
+        if ytype == 'abs':
+            ax.plot(day_df.date_new, day_df.pout_hPa_new, linestyle='none', marker='.', color='b', label='Pout')
+            ax.plot(mod_psurfs_sub.index, mod_psurfs_sub.psurf, linestyle='none', marker='P', markersize=12,
+                    color='r', label='FPIT')
+            ax.plot(day_df.date_new, day_df.fpit_surfp, linestyle='none', marker='.', color='orange',
+                    label='interp. FPIT')
+            ax.set_ylabel('Surface pressure (hPa)')
+            ax.legend()
+        elif ytype == 'delta':
+            ax.plot(day_df.date_new, day_df.pout_hPa_new - day_df.fpit_surfp, linestyle='none', marker='.', color='k')
+            ax.set_ylabel('pout - FPIT surface pressure (hPa)')
+        else:
+            raise NotImplementedError('ytype "{}" not implemented'.format(ytype))
+
+        ax.grid()
+
+        plt.xticks(rotation=45)
+        ax.set_ylabel()
+        ax.set_title('{}: {}'.format(site, this_date.strftime('%Y-%m-%d')))
+        # ax.set_xlim(*hour_range)
+        if fix_ylim == 'global':
+            ax.set_ylim(pout_range)
+        elif fix_ylim == 'by-site':
+            ax.set_ylim(site_p_range)
+
+    fig.set_size_inches(16, 4 * ny)
+    plt.subplots_adjust(hspace=0.4)
+    return fig
