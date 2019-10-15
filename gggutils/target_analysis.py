@@ -45,6 +45,10 @@ _abbrev_to_subdir = {'ae': 'Ascension',
 all_sites = tuple(_abbrev_to_subdir.keys())
 
 
+def is_outlier(y, zcut=2):
+    xx = stats.zscore(np.abs(y)) < zcut
+    return ~xx
+
 def read_eof_csv(csv_file: str) -> pd.DataFrame:
     """
     Read a .eof.csv (engineering output file, comma-separated value format) file
@@ -340,8 +344,8 @@ def compute_adcf(df, remove_outliers=False) -> pd.Series:
     """
     adcf = df.sdc / df.ybar
     if remove_outliers:
-        xx = stats.zscore(adcf) < 2
-        adcf = adcf[xx]
+        xx = is_outlier(adcf)
+        adcf = adcf[~xx]
 
     return adcf
 
