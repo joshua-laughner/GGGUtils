@@ -147,7 +147,7 @@ def df_ydh_to_dtind(df: pd.DataFrame) -> pd.DatetimeIndex:
     return pd.DatetimeIndex([ydh_to_timestamp(int(y), d, h) for y, d, h in zip(df.year, df.day, df.hour)])
 
 
-_def_req_cols = ('flag', 'date', 'column_o2', 'xluft', 'column_luft', 'xco2_ppm', 'column_co2')
+_def_req_cols = ('flag', 'date', 'year', 'day', 'hour', 'column_o2', 'xluft', 'column_luft', 'xco2_ppm', 'column_co2')
 
 
 def match_test_to_delivered_data(site_abbrev: str, new_eof_csv_file: str, req_columns: Sequence[str] = _def_req_cols,
@@ -229,6 +229,7 @@ def match_test_to_delivered_data(site_abbrev: str, new_eof_csv_file: str, req_co
     else:
         raise ValueError('do_qual_filter = "{}" is invalid'.format(do_qual_filter))
 
+    combo_df['site'] = site_abbrev
     return combo_df.loc[xx, :]
 
 
@@ -259,7 +260,6 @@ def match_test_to_delivered_multi_site(site_abbrevs: Sequence[str], **kwargs) ->
     total_df = None
     for site in site_abbrevs:
         df = match_test_to_delivered_by_site(site, **kwargs)
-        df['site'] = site
         if total_df is None:
             total_df = df
         else:
@@ -422,7 +422,7 @@ def calc_delta_x(df: pd.DataFrame, xquantity: str, recalc_raw: bool = False, rec
     
     # Get the x-quantity to calculate the delta of
     if recalc_raw:
-        xdata = tgts.recalc_x(df, xquantity, scale=recalc_scale)
+        xdata = recalc_x(df, xquantity, scale=recalc_scale)
     else:
         xdata = df[xquantity]
         
@@ -439,3 +439,90 @@ def calc_delta_x(df: pd.DataFrame, xquantity: str, recalc_raw: bool = False, rec
     delta_df['delta_hours'] = df[hour_key] - df[hour_key][noon_idx]
     delta_df['asza_deg'] = df[sza_key]
     return delta_df
+
+
+def add_fpit_pres(matched_eofs: pd.DataFrame, interp_method: str = 'index') -> (pd.DataFrame, pd.DataFrame):
+    """
+    Add FPIT surface pressure from .mod files
+
+    Note that this requires the necessary .mod files to be available in :file:`$GGGPATH/models/gnd`.
+
+    :param matched_eofs: a data frame created by one of the ``match_test_*`` functions that the FPIT surface pressure
+     will be added to. Must contain columns "site", "year_new", and "day_new".
+    :param interp_method: how to interpolate FPIT pressure to the observation times.
+    :return: two data frames. The first will be ``matched_eofs`` but with the fpit_surfp added as a new column. The
+     second will be the individual FPIT surface pressure from the .mod files.
+    """
+    with pd.option_context('mode.chained_assignment', None):
+        mod_dir = os.path.join(os.path.expandvars('$GGGPATH'), 'models', 'gnd')
+
+        def round_to_3h(ts, nexthr=False):
+            hr = ts.hour // 3 * 3
+            ts = pd.Timestamp(ts.year, ts.month, ts.day, hr)
+            if nexthr:
+                ts += pd.Timedelta(hours=3)
+            return ts
+
+        matched_eofs = matched_eofs.reset_index(drop=True)
+        matched_eofs['fpit_surfp'] = np.nan
+        mod_df = pd.DataFrame(columns=['site', 'psurf', 'pbottom', 'mod_file'])
+        sites_listed = set()
+        for (site, year, doy), sub_df in matched_eofs.groupby(['site', 'year_new', 'day_new']):
+            if site not in sites_listed:
+                print('On', site)
+                sites_listed.add(site)
+            # get the site lat and lon. there must be one unique value, or .item() will raise a
+            # ValueError
+            site_lon = sub_df.long_deg_new.unique().item()
+            site_lat = sub_df.lat_deg_new.unique().item()
+
+            # We'll need to do a little work on the dataframe. We need to keep the integer index so
+            # that we can put the values back in the main dataframe, but we need the actual index to
+            # be the date so that we can insert the geos surface pressure by date and interpolate
+            sub_df['rownum'] = sub_df.index
+            sub_df = sub_df.set_index('date_new', drop=False)
+
+            # load the surface pressures for the relevant times
+            first_geos_time = round_to_3h(sub_df.date_new.min())
+            last_geos_time = round_to_3h(sub_df.date_new.max(), nexthr=True)
+            geos_times = pd.date_range(first_geos_time, last_geos_time, freq='3H')
+
+            for geos_time in geos_times:
+                mod_file_name = mod_utils.mod_file_name_for_priors(geos_time, site_lat, site_lon)
+                mod_file_name = os.path.join(mod_dir, mod_file_name)
+                mod_data = mod_utils.read_mod_file(mod_file_name)
+                sub_df.loc[geos_time, 'fpit_surfp'] = mod_data['scalar']['Pressure']
+
+                this_mod_dict = {'site': site, 'year': year, 'day': doy, 'psurf': mod_data['scalar']['Pressure'],
+                                 'pbottom': mod_data['profile']['Pressure'][0], 'mod_file': mod_file_name}
+                mod_df = pd.concat([mod_df, pd.DataFrame(this_mod_dict, index=[geos_time])], sort=True)
+
+            sub_df['fpit_surfp'] = sub_df.fpit_surfp.sort_index().interpolate(method=interp_method)
+            # Now that we've filled in the FPIT surface pressure, we need to get it back into the main dataframe.
+            # We'll first remove rows that do not have a row number, because they were not in the original dataframe,
+            # then turn those back into a integer index and use that to determine which rows the fpit pressures go in
+            xx_orig = ~pd.isnull(sub_df.rownum)
+            orig_rows = pd.Int64Index(sub_df[xx_orig].rownum)
+            sub_df = sub_df[xx_orig].set_index(orig_rows)
+            matched_eofs.loc[orig_rows, 'fpit_surfp'] = sub_df.fpit_surfp
+
+    return matched_eofs, mod_df
+
+
+def load_eofs_with_fpit(sites: Sequence[str], match_kws: dict = None, fpit_kws: dict = None) -> (pd.DataFrame, pd.DataFrame):
+    """
+    Simultaneously load .eof.csv files and the associated FPIT surface pressure
+
+    :param sites: sequence of site abbreviations to load .eof.csv files from
+    :param match_kws: keyword arguments for :func:`match_test_to_delivered_multi_site`
+    :param fpit_kws: keyword arguments for :func:`add_fpit_pres`
+    :return: two data frames. The first will be ``matched_eofs`` but with the fpit_surfp added as a new column. The
+     second will be the individual FPIT surface pressure from the .mod files.
+    """
+    if match_kws is None:
+        match_kws = dict()
+    if fpit_kws is None:
+        fpit_kws = dict()
+
+    all_matched_eofs = match_test_to_delivered_multi_site(sites, **match_kws)
+    return add_fpit_pres(all_matched_eofs, **fpit_kws)
