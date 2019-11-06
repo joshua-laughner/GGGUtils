@@ -49,7 +49,7 @@ def is_outlier(y, zcut=2):
     xx = stats.zscore(np.abs(y)) < zcut
     return ~xx
 
-def read_eof_csv(csv_file: str) -> pd.DataFrame:
+def read_eof_csv(csv_file: str, date_index=True) -> pd.DataFrame:
     """
     Read a .eof.csv (engineering output file, comma-separated value format) file
     :param csv_file: the path to the .eof.csv file
@@ -58,7 +58,10 @@ def read_eof_csv(csv_file: str) -> pd.DataFrame:
     """
     nhead = mod_utils.get_num_header_lines(csv_file)
     df = pd.read_csv(csv_file, header=nhead - 1, sep=',')
-    df.set_index(df_ydh_to_dtind(df), inplace=True, verify_integrity=True)
+    if date_index:
+        df.set_index(df_ydh_to_dtind(df), inplace=True, verify_integrity=True)
+    else:
+        df['date'] = df_ydh_to_dtind(df)
     return df
 
 
@@ -213,10 +216,20 @@ def match_test_to_delivered_data(site_abbrev: str, new_eof_csv_file: str, req_co
     # respectively.
     old_columns = [c.replace('air', 'luft') for c in old_df.columns]
     old_df.columns = old_columns
-    old_df = old_df.loc[old_inds, :].reset_index().rename(columns={'index': 'date'}).loc[:, req_columns]
-    new_df = new_df.loc[old_inds, :].reset_index().rename(columns={'index': 'date'}).loc[:, req_columns]
+    old_df = old_df.loc[old_inds, :].reset_index().rename(columns={'index': 'date'})
+    missing = [c for c in req_columns if c not in old_df.columns]
+    if len(missing) > 0:
+        raise KeyError('The following columns were missing from the old data frame: {}'.format(', '.join(missing)))
+    old_df = old_df.loc[:, req_columns]
+    
+    new_df = new_df.loc[old_inds, :].reset_index().rename(columns={'index': 'date'})
+    missing = [c for c in req_columns if c not in new_df.columns]
+    if len(missing) > 0:
+        raise KeyError('The following columns were missing from the new data frame: {}'.format(', '.join(missing)))
+    new_df = new_df.loc[:, req_columns]
 
     combo_df = old_df.join(new_df, how='inner', lsuffix='_old', rsuffix='_new')
+    combo_df['site'] = site_abbrev
 
     if do_qual_filter == 'none':
         return combo_df
@@ -229,7 +242,6 @@ def match_test_to_delivered_data(site_abbrev: str, new_eof_csv_file: str, req_co
     else:
         raise ValueError('do_qual_filter = "{}" is invalid'.format(do_qual_filter))
 
-    combo_df['site'] = site_abbrev
     return combo_df.loc[xx, :]
 
 
@@ -259,7 +271,12 @@ def match_test_to_delivered_multi_site(site_abbrevs: Sequence[str], **kwargs) ->
     """
     total_df = None
     for site in site_abbrevs:
-        df = match_test_to_delivered_by_site(site, **kwargs)
+        try:
+            df = match_test_to_delivered_by_site(site, **kwargs)
+        except IOError as err:
+            print('Skipping {}: {}'.format(site, err))
+            continue
+
         if total_df is None:
             total_df = df
         else:
@@ -282,7 +299,7 @@ def recalc_x(df: pd.DataFrame, xname: str, scale: float) -> pd.Series:
     :param scale: a final scale factor to put the X-quantity in the right units.
     :return: the series of X-quantity values.
     """
-    specie = re.search('(?<=x)\w+(?=_)', xname).group()
+    specie = re.search('(?<=x)[A-Za-z0-9]+', xname).group()
     old_or_new = re.search('_(old|new)$', xname)
     if old_or_new is None:
         old_or_new = ''
@@ -441,7 +458,7 @@ def calc_delta_x(df: pd.DataFrame, xquantity: str, recalc_raw: bool = False, rec
     return delta_df
 
 
-def add_fpit_pres(matched_eofs: pd.DataFrame, interp_method: str = 'index') -> (pd.DataFrame, pd.DataFrame):
+def add_fpit_pres(matched_eofs: pd.DataFrame, interp_method: str = 'index', mod_dir=None, suffix='_new') -> (pd.DataFrame, pd.DataFrame):
     """
     Add FPIT surface pressure from .mod files
 
@@ -454,7 +471,8 @@ def add_fpit_pres(matched_eofs: pd.DataFrame, interp_method: str = 'index') -> (
      second will be the individual FPIT surface pressure from the .mod files.
     """
     with pd.option_context('mode.chained_assignment', None):
-        mod_dir = os.path.join(os.path.expandvars('$GGGPATH'), 'models', 'gnd')
+        if mod_dir is None:
+            mod_dir = os.path.join(os.path.expandvars('$GGGPATH'), 'models', 'gnd')
 
         def round_to_3h(ts, nexthr=False):
             hr = ts.hour // 3 * 3
@@ -463,28 +481,34 @@ def add_fpit_pres(matched_eofs: pd.DataFrame, interp_method: str = 'index') -> (
                 ts += pd.Timedelta(hours=3)
             return ts
 
+        lon_key = 'long_deg' + suffix
+        lat_key = 'lat_deg' + suffix
+        date_key = 'date' + suffix
+        year_key = 'year' + suffix
+        day_key = 'day' + suffix
+
         matched_eofs = matched_eofs.reset_index(drop=True)
         matched_eofs['fpit_surfp'] = np.nan
         mod_df = pd.DataFrame(columns=['site', 'psurf', 'pbottom', 'mod_file'])
         sites_listed = set()
-        for (site, year, doy), sub_df in matched_eofs.groupby(['site', 'year_new', 'day_new']):
+        for (site, year, doy), sub_df in matched_eofs.groupby(['site', year_key, day_key]):
             if site not in sites_listed:
                 print('On', site)
                 sites_listed.add(site)
             # get the site lat and lon. there must be one unique value, or .item() will raise a
             # ValueError
-            site_lon = sub_df.long_deg_new.unique().item()
-            site_lat = sub_df.lat_deg_new.unique().item()
+            site_lon = sub_df[lon_key].unique().item()
+            site_lat = sub_df[lat_key].unique().item()
 
             # We'll need to do a little work on the dataframe. We need to keep the integer index so
             # that we can put the values back in the main dataframe, but we need the actual index to
             # be the date so that we can insert the geos surface pressure by date and interpolate
             sub_df['rownum'] = sub_df.index
-            sub_df = sub_df.set_index('date_new', drop=False)
+            sub_df = sub_df.set_index(date_key, drop=False)
 
             # load the surface pressures for the relevant times
-            first_geos_time = round_to_3h(sub_df.date_new.min())
-            last_geos_time = round_to_3h(sub_df.date_new.max(), nexthr=True)
+            first_geos_time = round_to_3h(sub_df[date_key].min())
+            last_geos_time = round_to_3h(sub_df[date_key].max(), nexthr=True)
             geos_times = pd.date_range(first_geos_time, last_geos_time, freq='3H')
 
             for geos_time in geos_times:
