@@ -12,11 +12,12 @@ from .plots import comparison_plots as comp
 from . import target_analysis as tgts
 
 
-def make_standard_comparison_plots(test_root_dir, save_file):
-    sites = os.listdir(test_root_dir)
-    sites = [s for s in sites if len(s) == 2]
-    matched_df = tgts.match_test_to_delivered_multi_site(site_abbrevs=sites, test_root_dir=test_root_dir,
-                                                         req_columns='all')
+def make_standard_comparison_plots(test_root_dir, save_file, matched_df=None):
+    if matched_df is None:
+        sites = os.listdir(test_root_dir)
+        sites = [s for s in sites if len(s) == 2]
+        matched_df = tgts.match_test_to_delivered_multi_site(site_abbrevs=sites, test_root_dir=test_root_dir,
+                                                             req_columns='all')
 
     # plots - start with differences in Xgas quantities (raw and corrected), VSFs, and RMSes
     diff = 'diff'
