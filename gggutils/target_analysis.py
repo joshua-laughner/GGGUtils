@@ -16,7 +16,7 @@ from .exceptions import TimeMatchError
 
 # At some point, we'll want these to be configurable.
 _root_dir = '/oco2-data/tccon/data_delivery/OCO2/'
-_test_root_dir = '/oco2-data/tccon-nobak/scratch/beta-test-spectra/rc1/'
+_default_test_root_dir = '/oco2-data/tccon-nobak/scratch/beta-test-spectra/rc1/'
 _abbrev_to_subdir = {'ae': 'Ascension',
                      'bi': 'Bialystok',
                      'br': 'Bremen',
@@ -245,7 +245,7 @@ def match_test_to_delivered_data(site_abbrev: str, new_eof_csv_file: str, req_co
     return combo_df.loc[xx, :]
 
 
-def match_test_to_delivered_by_site(site_abbrev: str, **kwargs) -> pd.DataFrame:
+def match_test_to_delivered_by_site(site_abbrev: str, test_root_dir: str = _default_test_root_dir, **kwargs) -> pd.DataFrame:
     """
     Automatically match old and new data for a specific site.
 
@@ -258,11 +258,12 @@ def match_test_to_delivered_by_site(site_abbrev: str, **kwargs) -> pd.DataFrame:
      cannot be included because that is determined by this function.
     :return: the combined dataframe, same as :func:`match_test_to_delivered_data`.
     """
-    new_eof_csv_file = find_by_glob(os.path.join(_test_root_dir, site_abbrev, 'postproc', '*eof.csv'))
+    new_eof_csv_file = find_by_glob(os.path.join(test_root_dir, site_abbrev, 'postproc', '*eof.csv'))
     return match_test_to_delivered_data(site_abbrev, new_eof_csv_file, **kwargs)
 
 
-def match_test_to_delivered_multi_site(site_abbrevs: Sequence[str], **kwargs) -> pd.DataFrame:
+def match_test_to_delivered_multi_site(site_abbrevs: Sequence[str], test_root_dir: str = _default_test_root_dir,
+                                       **kwargs) -> pd.DataFrame:
     """
     Load old and new .eof.csv files for many sites
     :param site_abbrevs: list of two letter site abbreviations
@@ -272,7 +273,7 @@ def match_test_to_delivered_multi_site(site_abbrevs: Sequence[str], **kwargs) ->
     total_df = None
     for site in site_abbrevs:
         try:
-            df = match_test_to_delivered_by_site(site, **kwargs)
+            df = match_test_to_delivered_by_site(site, test_root_dir=test_root_dir, **kwargs)
         except IOError as err:
             print('Skipping {}: {}'.format(site, err))
             continue
@@ -329,7 +330,8 @@ def read_adcf_file(adcf_file: str) -> pd.DataFrame:
     return df.set_index(df.apply(_make_timestamp, axis=1))
 
 
-def iter_adcf_files(sites: Sequence[str], gas: str, ignore_missing: bool = False) -> (str, pd.DataFrame):
+def iter_adcf_files(sites: Sequence[str], gas: str, ignore_missing: bool = False,
+                    test_root_dir: str = _default_test_root_dir) -> (str, pd.DataFrame):
     """
     Iterate over the ADCF files for a list of sites for a specific gas
     :param sites: a sequence of site abbreviations
@@ -338,7 +340,7 @@ def iter_adcf_files(sites: Sequence[str], gas: str, ignore_missing: bool = False
     :return: iteration over the site abbreviations and the corresponding data frames
     """
     for site in sites:
-        pp_dir = os.path.join(_test_root_dir, site, 'postproc')
+        pp_dir = os.path.join(test_root_dir, site, 'postproc')
         gas_adcf_file = os.path.join(pp_dir, 'dac_{site}_targets.vav_{gas}.out'.format(site=site, gas=gas))
         try:
             df = read_adcf_file(gas_adcf_file)
@@ -367,7 +369,8 @@ def compute_adcf(df, remove_outliers=False) -> pd.Series:
     return adcf
 
 
-def load_all_adcfs(sites: Sequence[str], gas: str, ignore_missing: bool = True, req_num_spectra: int = 200) -> pd.DataFrame:
+def load_all_adcfs(sites: Sequence[str], gas: str, ignore_missing: bool = True, req_num_spectra: int = 200,
+                   test_root_dir: str = _default_test_root_dir) -> pd.DataFrame:
     """
     Load all ADCF files
 
@@ -383,7 +386,7 @@ def load_all_adcfs(sites: Sequence[str], gas: str, ignore_missing: bool = True, 
     for site, site_df in iter_adcf_files(sites, gas, ignore_missing=ignore_missing):
         if req_num_spectra > 0:
             # Read the .eof.csv file to get the number of spectra per day that are good
-            eof_df = read_eof_csv(find_by_glob(os.path.join(_test_root_dir, site, 'postproc', '*.eof.csv')))
+            eof_df = read_eof_csv(find_by_glob(os.path.join(test_root_dir, site, 'postproc', '*.eof.csv')))
             xx_dates = pd.Series(False, index=site_df.index)
             for date in site_df.index:
                 xx_eof = (eof_df.year == date.year) & (eof_df.day == date.dayofyear)
