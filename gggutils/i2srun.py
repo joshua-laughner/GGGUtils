@@ -1273,7 +1273,7 @@ def _check_slice_links(run_directory, run_file):
     return missing_slices
 
 
-def run_all_i2s(cfg_file, n_procs=1):
+def run_all_i2s(cfg_file, n_procs=1, dry_run=False):
     """
     Run I2S for all days specified in a config file
 
@@ -1305,18 +1305,18 @@ def run_all_i2s(cfg_file, n_procs=1):
         for datestr in site_cfg.sections:
             this_run_dir = date_subdir(cfg, site, datestr)
             if n_procs > 1:
-                pool_args.append((this_run_dir, i2s_cmd))
+                pool_args.append((this_run_dir, i2s_cmd, dry_run))
             else:
                 # I like to avoid opening a pool if only running with one processor because it's easier to debug; you
                 # can actually step into the run function.
-                _run_one_i2s(this_run_dir, i2s_cmd)
+                _run_one_i2s(this_run_dir, i2s_cmd, dry_run)
 
     if len(pool_args) > 0:
         with Pool(processes=n_procs) as pool:
             pool.starmap(_run_one_i2s, pool_args)
 
 
-def _run_one_i2s(run_dir, i2s_cmd):
+def _run_one_i2s(run_dir, i2s_cmd, dry_run):
     """
     Run I2S for one day's interferograms
 
@@ -1345,8 +1345,11 @@ def _run_one_i2s(run_dir, i2s_cmd):
 
     now = dt.datetime.now()
     log_file = os.path.join(run_dir, 'run_i2s_{}.log'.format(now.strftime('%Y%m%dT%H%M%S')))
-    logger.info('Starting I2S in {rundir} using {infile} as input file. I2S output piped to {log}.'
-                .format(rundir=run_dir, infile=i2s_input_file, log=log_file))
+    logger.info('Starting I2S ({cmd}) in {rundir} using {infile} as input file. I2S output piped to {log}.'
+                .format(cmd=i2s_cmd, rundir=run_dir, infile=i2s_input_file, log=log_file))
+    if dry_run:
+        return
+
     with open(log_file, 'w') as log:
         p = Popen([i2s_cmd, i2s_input_file], stdout=log, stderr=log, cwd=run_dir)
         p.wait()
@@ -1704,6 +1707,7 @@ def parse_run_i2s_args(parser):
     parser.description = 'Run I2S in bulk for all target interferograms specified in a config file'
     parser.add_argument('cfg_file', help='The configuration file to use to drive the execution of I2S')
     parser.add_argument('-n', '--n-procs', default=1, type=int, help='Number of processors to use to run I2S')
+    parser.add_argument('-d', '--dry-run', action='store_true', help='Print the actions that would normally be taken')
     parser.set_defaults(driver_fxn=run_all_i2s)
 
 
