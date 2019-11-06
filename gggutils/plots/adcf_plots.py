@@ -1,5 +1,6 @@
 from matplotlib import pyplot as plt
 import numpy as np
+import pandas as pd
 from jllutils import plots as jplots
 
 from .. import target_analysis as tgts
@@ -132,8 +133,11 @@ def plot_adcf_seasonal_hist(adcfs, gas, network_adcf=None, hist_bins=_def_hist_b
     return fig
 
 
-def plot_adcf_overall_hist(adcfs, gas, network_adcf=None, hist_bins=_def_hist_bins):
-    fig, ax = plt.subplots()
+def plot_adcf_overall_hist(adcfs, gas, network_adcf=None, hist_bins=_def_hist_bins, ax=None):
+    if ax is None:
+        fig, ax = plt.subplots()
+    else:
+        fig = ax.figure
     ax.hist(adcfs.adcf, hist_bins, histtype='step', color='k')
     ax.set_xlabel('{} ACDF'.format(gas))
     if network_adcf is not None:

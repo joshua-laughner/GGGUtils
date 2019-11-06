@@ -5,7 +5,7 @@ import pandas as pd
 from ..target_analysis import calc_delta_x
 
 
-def _plot_xluft_timeser(all_matched_eofs, get_for_day_fxn):
+def _plot_xluft_timeser(all_matched_eofs, get_for_day_fxn, recalc_raw=True):
     all_sites = all_matched_eofs.site.unique()
     nsites = len(all_sites)
     ny = nsites // 2 + nsites % 2
@@ -29,9 +29,9 @@ def _plot_xluft_timeser(all_matched_eofs, get_for_day_fxn):
             iday += 1
 
             old_noon_xlufts[iday] = get_for_day_fxn(
-                calc_delta_x(day_df, 'xluft_old', recalc_raw=True, recalc_scale=1.0, check_times=False))
+                calc_delta_x(day_df, 'xluft_old', recalc_raw=recalc_raw, recalc_scale=1.0, check_times=False))
             new_noon_xlufts[iday] = get_for_day_fxn(
-                calc_delta_x(day_df, 'xluft_new', recalc_raw=True, recalc_scale=1.0, check_times=False))
+                calc_delta_x(day_df, 'xluft_new', recalc_raw=recalc_raw, recalc_scale=1.0, check_times=False))
             datetimes.append(this_date)
 
         ax.plot(datetimes, old_noon_xlufts, linestyle='none', marker='x', color='r', label='GGG2014')
@@ -47,17 +47,17 @@ def _plot_xluft_timeser(all_matched_eofs, get_for_day_fxn):
     return fig
 
 
-def plot_noon_xluft(matched_eofs):
+def plot_noon_xluft(matched_eofs, recalc_raw=True):
     def get_noon(df):
         idx = np.argmin(df.delta_hours.abs().to_numpy())
         return df.xluft_raw.iloc[idx]
 
-    return _plot_xluft_timeser(matched_eofs, get_noon)
+    return _plot_xluft_timeser(matched_eofs, get_noon, recalc_raw=recalc_raw)
 
 
-def plot_xluft_in_sza(matched_eofs, sza_range=(40, 50)):
+def plot_xluft_in_sza(matched_eofs, sza_range=(40, 50), recalc_raw=True):
     def get_by_sza(df):
         xx = (df.asza_deg >= sza_range[0]) & (df.asza_deg <= sza_range[1])
         return df.xluft_raw[xx].mean()
 
-    return _plot_xluft_timeser(matched_eofs, get_by_sza)
+    return _plot_xluft_timeser(matched_eofs, get_by_sza, recalc_raw=recalc_raw)

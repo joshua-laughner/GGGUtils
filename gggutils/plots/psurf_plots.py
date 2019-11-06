@@ -127,7 +127,6 @@ def plot_one_site_pout_timeser(site_df: pd.DataFrame, mod_psurfs: pd.DataFrame, 
         ax.grid()
 
         plt.xticks(rotation=45)
-        ax.set_ylabel()
         ax.set_title('{}: {}'.format(site, this_date.strftime('%Y-%m-%d')))
         # ax.set_xlim(*hour_range)
         if fix_ylim == 'global':
