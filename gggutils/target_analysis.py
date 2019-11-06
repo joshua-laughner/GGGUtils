@@ -216,17 +216,21 @@ def match_test_to_delivered_data(site_abbrev: str, new_eof_csv_file: str, req_co
     # respectively.
     old_columns = [c.replace('air', 'luft') for c in old_df.columns]
     old_df.columns = old_columns
+
     old_df = old_df.loc[old_inds, :].reset_index().rename(columns={'index': 'date'})
-    missing = [c for c in req_columns if c not in old_df.columns]
-    if len(missing) > 0:
-        raise KeyError('The following columns were missing from the old data frame: {}'.format(', '.join(missing)))
-    old_df = old_df.loc[:, req_columns]
-    
     new_df = new_df.loc[old_inds, :].reset_index().rename(columns={'index': 'date'})
-    missing = [c for c in req_columns if c not in new_df.columns]
-    if len(missing) > 0:
-        raise KeyError('The following columns were missing from the new data frame: {}'.format(', '.join(missing)))
-    new_df = new_df.loc[:, req_columns]
+
+    if req_columns != 'all':
+        # If there was a limit placed on the columns, cut down the dataframes to just those columns
+        missing = [c for c in req_columns if c not in old_df.columns]
+        if len(missing) > 0:
+            raise KeyError('The following columns were missing from the old data frame: {}'.format(', '.join(missing)))
+        old_df = old_df.loc[:, req_columns]
+
+        missing = [c for c in req_columns if c not in new_df.columns]
+        if len(missing) > 0:
+            raise KeyError('The following columns were missing from the new data frame: {}'.format(', '.join(missing)))
+        new_df = new_df.loc[:, req_columns]
 
     combo_df = old_df.join(new_df, how='inner', lsuffix='_old', rsuffix='_new')
     combo_df['site'] = site_abbrev
