@@ -108,7 +108,7 @@ def create_runlogs_from_scratch(cfg_file, clean_spectrum_links='ask', do_slice_s
         site_all_spectra_dir = _link_site_spectra(site, cfg, clean_links=clean_spectrum_links)
         _add_dir_to_data_part(site_all_spectra_dir, add_to_list_data_part=True)
         try:
-            list_file = _make_spectra_list(site_all_spectra_dir, site)
+            list_file = _make_spectra_list(site_all_spectra_dir, '{}_targets.gnd'.format(site))
             sunrun_file = _create_sunrun(list_file, site)
         except GGGInputException as err:
             logger.warning('Skipping {}: {}'.format(site, err))
@@ -322,13 +322,18 @@ def _concate_runlogs(runlogs, site_id, delete_date_runlogs=False):
                 os.remove(this_runlog)
 
 
-def _make_spectra_list(all_spectra_dir, site):
+def _make_spectra_list(all_spectra_dir, list_basename, detectors='ab', req_all_detectors=True):
+    if 'a' not in detectors:
+        raise NotImplementedError('a must be in the detectors at present')
+    else:
+        detectors = detectors.replace('a', '')
+
     list_dir = runutils.get_ggg_subpath('lists')
 
     if not os.path.exists(list_dir):
         os.mkdir(list_dir)
 
-    list_file = os.path.join(list_dir, '{}_targets.gnd'.format(site))
+    list_file = os.path.join(list_dir, list_basename)
 
     # the s means solar (avoids lamp runs), the a means the InGaAs detector
     ingaas_spectra = sorted(glob(os.path.join(all_spectra_dir, '??????????s????a.*')))
@@ -336,16 +341,22 @@ def _make_spectra_list(all_spectra_dir, site):
     if len(ingaas_spectra) == 0:
         raise GGGInputException('No spectra in {}'.format(all_spectra_dir))
 
-    # These should already be in chronological order, so we just need to interleave the "b" detector files
-    # The shell script on the wiki doesn't check that the b files exist so I'm going to assume that there should
-    # always be a "b" file for every "a" file for now.
     with open(list_file, 'w') as wobj:
         for spectrum in ingaas_spectra:
+            write_spectra = True
+            curr_spectra = []
             spectrum = os.path.basename(spectrum)
-            wobj.write(spectrum + '\n')
-            b_spectrum = re.sub(r'a(?=\.)', 'b', spectrum)
-            if os.path.exists(os.path.join(all_spectra_dir, b_spectrum)):
-                wobj.write(b_spectrum + '\n')
+            curr_spectra.append(spectrum + '\n')
+            for d in detectors:
+                d_spectrum = re.sub(r'a(?=\.)', d, spectrum)
+                if os.path.exists(os.path.join(all_spectra_dir, d_spectrum)):
+                    curr_spectra.append(d_spectrum + '\n')
+                elif req_all_detectors:
+                    write_spectra = False
+
+            if write_spectra:
+                wobj.writelines(curr_spectra)
+
 
     return list_file
 
@@ -448,7 +459,7 @@ def _iter_gfit_windows(exec_dir, suppress_spt=True):
             # multiggg.sh redirects output to /dev/null, we need to separate that redirect
             window = line.split('>')[0].split()[1]
             if suppress_spt:
-                ggg_file = _ggg_file_name(exec_dir, window)
+                ggg_file = os.path.join(exec_dir, window)
                 _change_ggg_file(ggg_file)
             yield window
 
@@ -472,10 +483,6 @@ def _run_one_window(exec_dir, window):
             subprocess.check_call(cmd, stdout=logobj, stderr=logobj, cwd=exec_dir)
         except subprocess.CalledProcessError:
             logger.error('GFIT errored on {window} in {execdir}'.format(window=cmd[1], execdir=exec_dir))
-
-
-def _ggg_file_name(exec_dir, window):
-    return runutils.find_by_glob(os.path.join(exec_dir, '{}.*.ggg'.format(window)))
 
 
 def _change_ggg_file(gggfile):
@@ -551,6 +558,18 @@ def parse_prior_infile_args(parser: ArgumentParser):
     parser.add_argument('-k', '--no-overwrite', dest='overwrite', action='store_false',
                         help='Do not overwrite existing input file.')
     parser.set_defaults(driver_fxn=make_automod_input_files)
+
+
+def parse_list_args(parser: ArgumentParser):
+    parser.description = 'Create a list file for spectra in a directory'
+    parser.add_argument('all_spectra_dir', metavar='spectra_dir', help='Directory containing the spectra to list')
+    parser.add_argument('list_basename', help='Name to give the list file, ending in .gnd. Will go in $GGGPATH/lists.')
+    parser.add_argument('-d', '--detectors', default='ab', help='Which detectors to include. Must include "a" currently. '
+                                                                 'Default is "%(default)s".')
+    parser.add_argument('-m', '--allow-missing-detectors', dest='req_all_detectors', action='store_false',
+                        help='By default, if a given spectrum is missing any of the requested detectors, is is skipped. '
+                             'Set this flag to allow e.g. an InGaAs spectrum without a corresponding Si spectrum.')
+    parser.set_defaults(driver_fxn=_make_spectra_list)
 
 
 def parse_scratch_runlog_args(parser: ArgumentParser):
@@ -634,6 +653,9 @@ def parse_all_gfit_args(parser: ArgumentParser):
     make_slice_runlogs = subp.add_parser('make-runlogs', aliases=['makerun'], help='Make sunruns and runlogs from '
                                                                                    'scratch.')
     parse_scratch_runlog_args(make_slice_runlogs)
+
+    make_list_p = subp.add_parser('make-list', help='Make a spectrum list file.')
+    parse_list_args(make_list_p)
 
     make_opus_runlogs = subp.add_parser('make-runlogs-from-delivered', aliases=['makerundel'],
                                         help='Make runlogs from delivered sunruns.')
