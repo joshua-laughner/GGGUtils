@@ -60,13 +60,10 @@ def save_pout_timeseries(all_matched_eofs: pd.DataFrame, mod_psurfs: pd.DataFram
     """
     gggvers = 'GGG2014' if old_or_new == 'old' else 'GGGNext'
 
-
-
     with PdfPages(os.path.join(save_dir, '{}_pout_timeseries.pdf'.format(gggvers.lower()))) as pdf:
         for site, site_df in all_matched_eofs.groupby('site'):
             print('On', gggvers, site)
-
-
+            fig = plot_one_site_pout_timeser(site_df=site_df, mod_psurfs=mod_psurfs, fix_ylim=fix_ylim)
             pdf.savefig(fig, bbox_inches='tight')
             plt.close(fig)
 
