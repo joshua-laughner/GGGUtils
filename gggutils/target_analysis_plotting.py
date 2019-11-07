@@ -22,10 +22,14 @@ def make_standard_comparison_plots(test_root_dir, save_file, matched_df=None):
     # plots - start with differences in Xgas quantities (raw and corrected), VSFs, and RMSes
     diff = 'diff'
     hist = 'hists'
-    plots = {'xluft': diff, 'xco2_ppm': diff, 'xn2o_ppb': diff, 'xch4_ppb': diff, 'xhf_ppt': diff, 'xco_ppb': diff}
+    plots = {'xluft': hist, 'xco2_ppm': hist, 'xn2o_ppb': hist, 'xch4_ppm': hist, 'xhf_ppt': hist, 'xco_ppb': hist}
 
     with PdfPages(save_file) as pdf:
         for column, plot_type in plots.items():
             for site, site_df in matched_df.groupby('site'):
                 comp.plot_comparison(matched_df=site_df, column=column, xraw=False, plot_type=plot_type, hlines=[0],
-                                     pdf=pdf)
+                                     pdf=pdf, suptitle=site)
+                comp.plot_comparison(matched_df=site_df, column=column, xraw=True, plot_type=plot_type, hlines=[0],
+                                     pdf=pdf, suptitle=site)
+                #comp.plot_comparison(matched_df=site_df, column=column, xraw=True, plot_type='hists', hlines=[0],
+                #                     pdf=pdf, suptitle=site)

@@ -8,7 +8,7 @@ register_matplotlib_converters()
 
 
 def plot_comparison(matched_df, column, xraw=False, plot_type='diff', old_suffix='_old', new_suffix='_new', hlines=tuple(),
-                    vlines=tuple(), pdf=None, plot_kws=None):
+                    vlines=tuple(), suptitle=None, pdf=None, plot_kws=None):
 
     if plot_kws is None:
         plot_kws = dict()
@@ -28,6 +28,10 @@ def plot_comparison(matched_df, column, xraw=False, plot_type='diff', old_suffix
             ax.axhline(y, color='k', linestyle='--')
         for x in vlines:
             ax.axvline(x, color='k', linestyle='--')
+
+    plt.subplots_adjust(wspace=0.5)
+    if suptitle:
+        fig.suptitle(suptitle)
 
     if pdf is not None:
         pdf.savefig(fig, bbox_inches='tight')
@@ -58,7 +62,7 @@ def _make_diff_plot(matched_df, old_column, new_column, xraw, old_label='', new_
         new_label += ' '
     ylabel = '{oldlab}{oldcol} - {newlab}{newcol}'.format(oldlab=old_label, oldcol=old_column,
                                                           newlab=new_label, newcol=new_column)
-    relylabel = '100% * ({oldlab}{oldcol} - {newlab}{newcol})/({newlab}{newcol})'.format(
+    relylabel = '100% * ({oldlab}{oldcol} - {newlab}{newcol})/\n({newlab}{newcol})'.format(
         oldlab=old_label, oldcol=old_column, newlab=new_label, newcol=new_column
     )
     if xraw:
@@ -71,15 +75,19 @@ def _make_diff_plot(matched_df, old_column, new_column, xraw, old_label='', new_
         y1 = _get_column(matched_df, old_column, raw=xraw)
         y2 = _get_column(matched_df, new_column, raw=xraw)
         dy = y2 - y1
-        rel_dy = dy / y1
+        rel_dy = 100 * dy / y1
 
         axs[0].plot(x, dy, linestyle='none', marker='.')
         axs[0].set_xlabel(xlabel)
         axs[0].set_ylabel(ylabel)
+        for tick in axs[0].get_xticklabels():
+            tick.set_rotation(45)
 
         axs[1].plot(x, rel_dy, linestyle='none', marker='.')
         axs[1].set_xlabel(xlabel)
         axs[1].set_ylabel(relylabel)
+        for tick in axs[1].get_xticklabels():
+            tick.set_rotation(45)
 
         return fig, axs
 
