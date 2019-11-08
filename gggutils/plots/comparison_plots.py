@@ -5,7 +5,7 @@ import re
 from .. import target_analysis as tgts
 
 register_matplotlib_converters()
-
+plt.subplots_adjust()
 
 def plot_comparison(matched_df, column, xraw=False, plot_type='diff', old_suffix='_old', new_suffix='_new', hlines=tuple(),
                     vlines=tuple(), suptitle=None, pdf=None, plot_kws=None):
