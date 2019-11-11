@@ -232,7 +232,10 @@ def match_test_to_delivered_data(site_abbrev: str, new_eof_csv_file: str, req_co
             raise KeyError('The following columns were missing from the new data frame: {}'.format(', '.join(missing)))
         new_df = new_df.loc[:, req_columns]
 
-    combo_df = old_df.join(new_df, how='inner', lsuffix='_old', rsuffix='_new')
+    # can't just use the suffix keywords of join b/c that only affects overlapping columns
+    old_df.columns = [k + '_old' for k in old_df.columns]
+    new_df.columns = [k + '_new' for k in new_df.columns]
+    combo_df = old_df.join(new_df, how='inner')
     combo_df['site'] = site_abbrev
 
     if do_qual_filter == 'none':
