@@ -7,13 +7,16 @@ from .. import target_analysis as tgts
 register_matplotlib_converters()
 plt.subplots_adjust()
 
-def plot_comparison(matched_df, column, xraw=False, plot_type='diff', old_suffix='_old', new_suffix='_new', hlines=tuple(),
-                    vlines=tuple(), suptitle=None, pdf=None, plot_kws=None):
+
+def plot_comparison(matched_df, column, old_column=None, xraw=False, plot_type='diff', old_suffix='_old',
+                    new_suffix='_new', hlines=tuple(), vlines=tuple(), suptitle=None, pdf=None, plot_kws=None):
 
     if plot_kws is None:
         plot_kws = dict()
+    if old_column is None:
+        old_column = column
 
-    old_column = column + old_suffix
+    old_column = old_column + old_suffix
     new_column = column + new_suffix
 
     if plot_type == 'diff':

@@ -30,17 +30,21 @@ def make_standard_comparison_plots(test_root_dir, save_file, matched_df=None):
 
     include_raw = ('xluft', 'xco2_ppm', 'xn2o_ppb', 'xch4_ppm', 'xh4_ppt', 'xco_ppb')
 
+    old_varnames = {'o2_7885_SG': 'o2_7885_S-G'}
+
     plots = {k: hist for k in hist_plots}
 
     with PdfPages(save_file) as pdf:
         for column, plot_type in plots.items():
             print('Plotting {} for '.format(column), end='')
+            old_column = old_varnames[column] if column in old_varnames else None
+
             for site, site_df in matched_df.groupby('site'):
                 print(site, end=' ')
-                comp.plot_comparison(matched_df=site_df, column=column, xraw=False, plot_type=plot_type, hlines=[0],
-                                     pdf=pdf, suptitle=site)
+                comp.plot_comparison(matched_df=site_df, column=column, old_column=column, xraw=False,
+                                     plot_type=plot_type, hlines=[0], pdf=pdf, suptitle=site)
                 if column in include_raw:
-                    comp.plot_comparison(matched_df=site_df, column=column, xraw=True, plot_type=plot_type, hlines=[0],
-                                         pdf=pdf, suptitle=site)
+                    comp.plot_comparison(matched_df=site_df, column=column, old_column=old_column, xraw=True,
+                                         plot_type=plot_type, hlines=[0], pdf=pdf, suptitle=site)
             print('')
         print('Done.')
