@@ -41,10 +41,13 @@ def plot_comparison(matched_df, column, xraw=False, plot_type='diff', old_suffix
 
 
 def _get_column(df, colname, raw):
-    unit = re.search(r'pp[mbt]', colname)
+    if colname not in df.keys():
+        return None
+
     if not raw:
         return df[colname]
 
+    unit = re.search(r'pp[mbt]', colname)
     if unit is None:
         scale = 1
     else:
@@ -74,6 +77,15 @@ def _make_diff_plot(matched_df, old_column, new_column, xraw, old_label='', new_
         x = matched_df[x_column]
         y1 = _get_column(matched_df, old_column, raw=xraw)
         y2 = _get_column(matched_df, new_column, raw=xraw)
+        if y1 is None or y2 is None:
+            if y1 is None and y2 is None:
+                missing = 'both'
+            elif y1 is None:
+                missing = old_column
+            elif y2 is None:
+                missing = new_column
+
+            raise KeyError('Cannot plot difference of {} and {}, {} is/are missing'.format(old_column, new_column, missing))
         dy = y2 - y1
         rel_dy = 100 * dy / y1
 
@@ -108,9 +120,16 @@ def _make_hists(matched_df, old_column, new_column, xraw, old_label='', new_labe
         data1 = _get_column(matched_df, old_column, raw=xraw)
         data2 = _get_column(matched_df, new_column, raw=xraw)
 
-        axs[0].hist(data1, bins=bins)
+        if data1 is not None:
+            axs[0].hist(data1, bins=bins)
         axs[0].set_xlabel(xlabel1)
-        axs[1].hist(data2, bins=bins)
+        for tick in axs[0].get_xticklabels():
+            tick.set_rotation(45)
+        
+        if data2 is not None:
+            axs[1].hist(data2, bins=bins)
         axs[1].set_xlabel(xlabel2)
+        for tick in axs[1].get_xticklabels():
+            tick.set_rotation(45)
 
     return fig, axs
