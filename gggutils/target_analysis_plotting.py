@@ -41,7 +41,7 @@ def make_standard_comparison_plots(test_root_dir, save_file, matched_df=None):
 
             for site, site_df in matched_df.groupby('site'):
                 print(site, end=' ')
-                comp.plot_comparison(matched_df=site_df, column=column, old_column=column, xraw=False,
+                comp.plot_comparison(matched_df=site_df, column=column, old_column=old_column, xraw=False,
                                      plot_type=plot_type, hlines=[0], pdf=pdf, suptitle=site)
                 if column in include_raw:
                     comp.plot_comparison(matched_df=site_df, column=column, old_column=old_column, xraw=True,
