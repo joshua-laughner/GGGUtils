@@ -49,7 +49,7 @@ def is_outlier(y, zcut=2):
     xx = stats.zscore(np.abs(y)) < zcut
     return ~xx
 
-def read_eof_csv(csv_file: str, date_index=True) -> pd.DataFrame:
+def read_eof_csv(csv_file: str, date_index=True, compute_date=True) -> pd.DataFrame:
     """
     Read a .eof.csv (engineering output file, comma-separated value format) file
     :param csv_file: the path to the .eof.csv file
@@ -60,7 +60,7 @@ def read_eof_csv(csv_file: str, date_index=True) -> pd.DataFrame:
     df = pd.read_csv(csv_file, header=nhead - 1, sep=',')
     if date_index:
         df.set_index(df_ydh_to_dtind(df), inplace=True, verify_integrity=True)
-    else:
+    elif compute_date:
         df['date'] = df_ydh_to_dtind(df)
     return df
 
