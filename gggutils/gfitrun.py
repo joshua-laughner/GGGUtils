@@ -16,6 +16,7 @@ from ginput.mod_maker import tccon_sites
 from ginput.common_utils import mod_utils
 
 from . import runutils, _etc_dir
+from .runutils import change_ggg_file
 from .exceptions import GGGInputException, GGGMenuError
 
 logger = getLogger('gfitrun')
@@ -460,7 +461,7 @@ def _iter_gfit_windows(exec_dir, suppress_spt=True):
             window = line.split('>')[0].split()[1]
             if suppress_spt:
                 ggg_file = os.path.join(exec_dir, window)
-                _change_ggg_file(ggg_file)
+                change_ggg_file(ggg_file)
             yield window
 
 
@@ -485,30 +486,6 @@ def _run_one_window(exec_dir, window):
             logger.error('GFIT errored on {window} in {execdir}'.format(window=cmd[1], execdir=exec_dir))
 
 
-def _change_ggg_file(gggfile):
-    with open(gggfile, 'r') as robj:
-        ggglines = robj.readlines()
-
-    for iline, line in enumerate(ggglines):
-        if '{sep}ak{sep}'.format(sep=os.sep) in line:
-            ggglines[iline] = './ak/k\n'
-        elif '{sep}spt{sep}'.format(sep=os.sep) in line:
-            # putting a 0 at the end of the line tells it to save no spectral fits.
-            # Debra will also organize her fits into subdirectories by window so that they don't overwrite each other,
-            # but I mainly don't want them written at all.
-            ggglines[iline] = './spt/z 0\n'
-
-    with open(gggfile, 'w') as wobj:
-        wobj.writelines(ggglines)
-
-    # Make the "ak" and "spt" subdirs just in case gfit will stop if they are missing
-    run_dir = os.path.dirname(gggfile)
-    ak_dir = os.path.join(run_dir, 'ak')
-    if not os.path.exists(ak_dir):
-        os.mkdir(ak_dir)
-    spt_dir = os.path.join(run_dir, 'spt')
-    if not os.path.exists(spt_dir):
-        os.mkdir(spt_dir)
 
 
 def make_gfit_abort_file():

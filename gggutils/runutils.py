@@ -510,3 +510,39 @@ def find_by_glob(pattern: str) -> str:
         return files[0]
     else:
         raise IOError('{} files matching {} found'.format(len(files), pattern))
+
+
+def change_ggg_file(gggfile, backup=False, aks='no', spts='no'):
+    # Get the window from the file name, needed for the ak/spt subdirectories
+    gggbname = os.path.basename(gggfile)
+    window = re.search(r'^[a-z]+_\d+', gggbname).group()
+
+    save_aks = aks != 'no'
+    save_spts = spts != 'no'
+
+    with open(gggfile, 'r') as robj:
+        ggglines = robj.readlines()
+
+    for iline, line in enumerate(ggglines):
+        if '{sep}ak{sep}'.format(sep=os.sep) in line and aks != 'gggpath':
+            end = '\n'  # TODO: figure out how to turn on saving AKs
+            ggglines[iline] = os.path.join('.', 'ak', window, 'k') + end
+        elif '{sep}spt{sep}'.format(sep=os.sep) in line and spts != 'gggpath':
+            # putting a 0 at the end of the line tells it to save no spectral fits.
+            end = '\n' if save_spts else ' 0 \n'
+            ggglines[iline] = os.path.join('.', 'spt', window, 'z') + end
+
+    if backup:
+        shutil.copy2(gggfile, gggfile+'.orig')
+
+    with open(gggfile, 'w') as wobj:
+        wobj.writelines(ggglines)
+
+    # Make the "ak" and "spt" subdirs just in case gfit will stop if they are missing
+    run_dir = os.path.dirname(gggfile)
+    ak_dir = os.path.join(run_dir, 'ak', window)
+    if aks != 'gggpath' and not os.path.exists(ak_dir):
+        os.makedirs(ak_dir)
+    spt_dir = os.path.join(run_dir, 'spt', window)
+    if spts != 'gggpath' and not os.path.exists(spt_dir):
+        os.makedirs(spt_dir)
