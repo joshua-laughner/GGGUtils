@@ -1,7 +1,7 @@
 from argparse import ArgumentParser
 import sys
 
-from . import target_utils, i2srun, gfitrun, ggglogging
+from . import target_utils, i2srun, gfitrun, gsetuprun, ggglogging
 
 
 def parse_args():
@@ -18,6 +18,9 @@ def parse_args():
 
     gfitp = subp.add_parser('gfit', help='GFIT related commands')
     gfitrun.parse_all_gfit_args(gfitp)
+
+    gsetupp = subp.add_parser('gsetup', help='GSETUP related commands')
+    gsetuprun.parse_all_gsetup_args(gsetupp)
 
     args = vars(p.parse_args())
     return args
