@@ -1,8 +1,6 @@
 import ephem  # TODO: replace with skyfield
 import numpy as np
 import pandas as pd
-from typing import Sequence
-import xarray as xr
 
 from jllutils import dataframes  # monkey-patches dataframes to have the ``interpolate_to`` method
 from jllutils import miscutils
@@ -12,126 +10,122 @@ class TimeOfDayError(Exception):
     pass
 
 
-def compute_daily_anomalies(df: pd.DataFrame, anomaly_type: str = 'noon', lon: float = None, lat: float = None,
-                            exclude_cols: Sequence[str] = ('year', 'day', 'hour', 'time', 'long_deg', 'lat_deg', 'start_time', 'end_time'),
-                            inplace: bool = False, fail_action: str = 'nan'):
+def find_all_transits(dates, obs, obj=ephem.Sun()):
+    """Identify all solar noon transits for a time period
+
+    Parameters
+    ----------
+    dates : pandas.DatetimeIndex
+        Index of dates. Solar transits will be identified for all
+        dates between the beginning and end of this index, with an
+        extra day added at the beginning and end of the record.
+
+    obs : ephem.Observer
+        A PyEphem Observer for the location we need to compute
+        solar noon for.
+
+    obj : ephem.Body
+        The heavenly body to compute transits for. The sun, by default,
+        so this means solar noons are calculated.
+
+    Returns
+    -------
+    numpy.ndarray
+        Array with `datetime64[ns]` type giving all transit times, in UTC,
+        covering the date range described by `dates`.
+    
     """
-    Convert values in a data frame to daily anomalies.
+    dates = dates.round('D')
+    start = dates.min() - pd.DateOffset(days=1)
+    end = dates.max() + pd.DateOffset(days=1)
+    dates = pd.date_range(start, end, freq='D')
+    noons = np.zeros(dates.shape, dtype='datetime64[ns]')
+    for idate, date in enumerate(dates):
+        noons[idate] = obs.next_transit(obj, ephem.Date(date)).datetime()
+        
+    return noons
 
-    :param df: A data frame indexed by time.
-    :param anomaly_type: how to compute the anomalies. Options are "noon" (relative to solar noon), "mean" (relative to
-     the daily mean), or "median" (relative to the daily median). Alternatively, pass a dataframe where the indices are
-     the solar dates that has the baseline values for each day to difference against.
-    :param lon: longitude of the site the anomalies are being computed for. Only used for ``anomaly_type = "noon"``, and
-     then can be automatically inferred as the mean of the "long_deg" column in the dataframe.
-    :param lat: latitude of the site. Same notes as ``lon`` apply.
-    :param exclude_cols: columns to not compute an anomaly for. The defaults are chosen assuming a TCCON public data
-     file was read in to cover variables for which a daily anomaly is not meaningful.
-    :param inplace: whether to carry out the calculation in-place and so modify the given dataframe.
-    :return: the modified dataframe, if ``inplace = False``.
+
+def calc_noon_anomalies(columns_ser, lon, lat, remove_dup=False):
+    """Calculate the anomalies from solar noon in retrieved gas data
+
+    Given a time series of retrieved gas data, this uses `find_all_transits`
+    to identify the solar noon times. The column data is then interpolated
+    to the solar noons. Each data point then has the solar noon value
+    subtracted to compute its diurnal anomaly. The solar noon value used
+    is determined by:
+
+        1. Get the solar noon values on either side
+        2. If one or both solar noon values is a NaN, points in between get 
+           the value of the solar noon they are closest to (including NaN
+           if that is the closest one).
+        3. If neither neighboring solar noon values are NaNs, then the points
+           in between are a time-distance-squared-weighted average of the 
+           solar noon values.
+
+    Parameters
+    ----------
+    columns_ser : pandas.Series
+        A Pandas series indexed by date. The values will be used to compute 
+        anomalies.
+
+    lon : float
+        The longitude of the site that we are computing anomalies for. 
+        Necessary to determine the solar noon times.
+
+    lat : float
+        The latitude of the site that we are computing anomalies for.
+
+    remove_dup : bool
+        Whether to remove values in the series that have a duplicate index.
+        If `True`, the first value of a duplicate index is kept and the others
+        are dropped. If `False`, then an error is raised if there are duplicate
+        indices
+
+    Returns
+    -------
+    anomalies : pandas.Series
+        A series of the diurnal anomalies, computed from `columns_ser`. Indexed by
+        datetime.
+
+    baselines : pandas.Series
+        A series of the solar noon values, indexed by datetime.
+    
     """
-    # use ephem to find sunrises around the first time. Group all lines for that day, iterate until we've grouped every
-    # row into solar days
-    if lon is None:
-        lon = df['long_deg'].mean()
-    if lat is None:
-        lat = df['lat_deg'].mean()
-
-    # check that there are no duplicate indices because this will break the interpolation to noon
-    # require the user to deal with because we can't assume the duplicate times can just be dropped
-    if df.index.duplicated().any() and anomaly_type == 'noon':
-        raise TimeOfDayError('The input dataframe contains duplicate indices which must be removed before computing '
-                             'anomalies with the "noon" method')
-
-    if not inplace:
-        df = df.copy()
-
-    columns_to_compute = [k for k in df.keys() if k not in exclude_cols]
-    if isinstance(anomaly_type, pd.DataFrame):
-        # Necessarily limit the columns to difference with the anomalies to those in the 
-        # input baselines if that's how we're doing this.
-        columns_to_compute = [col for col in columns_to_compute if col in anomaly_type.columns]
-
-    observer = ephem.Observer()
-    observer.lat, observer.long = '{:.4f}'.format(lat), '{:.4f}'.format(lon)
-
-    solar_dates = get_solar_dates(df.index, observer=observer)
-    df.loc[:, 'solar_date'] = solar_dates.astype('datetime64[ns]')
-    baseline_df = pd.DataFrame(index=pd.DatetimeIndex(np.unique(solar_dates)), columns=columns_to_compute, dtype=np.float)
-    pbar = miscutils.ProgressBar(solar_dates.size, prefix='Computing anomalies')
-    for solar_day, day_df in df.groupby('solar_date'):
-        xx = df.index.isin(day_df.index)
-        pbar.print_bar(np.flatnonzero(xx)[0])
-
-        if isinstance(anomaly_type, pd.DataFrame):
-            try:
-                baseline_row = anomaly_type.loc[solar_day, :]
-            except KeyError:
-                if fail_action == 'nan':
-                    df.loc[xx, columns_to_compute] = np.nan
-                    continue
-                else:
-                    raise
-        elif anomaly_type == 'noon':
-            try:
-                baseline_row = _find_solar_noon(day_df, observer=observer)
-            except TimeOfDayError as err:
-                if fail_action == 'nan':
-                    #print(err)
-                    df.loc[xx, columns_to_compute] = np.nan
-                    continue
-                else:
-                    raise
-        elif anomaly_type == 'mean':
-            baseline_row = day_df.mean()
-        elif anomaly_type == 'median':
-            baseline_row = day_df.median()
+    dd = columns_ser.index.duplicated()
+    columns_ser = columns_ser[~dd]
+    
+    obs = ephem.Observer()
+    obs.lat = '{:.4f}'.format(lat)
+    obs.lon = '{:.4f}'.format(lon)
+    
+    noons = find_all_transits(columns_ser.index, obs)
+    noon_values = columns_ser.interpolate_to(noons, limit=1)
+    
+    anomalies = pd.Series(np.nan, index=columns_ser.index)
+    baselines = pd.Series(np.nan, index=columns_ser.index)
+    cuts = pd.cut(columns_ser.index, noons)
+    for drange, sub_df in columns_ser.groupby(cuts):
+        left_noon, right_noon = drange.left, drange.right
+        left_noon_val = noon_values[left_noon]
+        right_noon_val = noon_values[right_noon]
+        
+        left_delta_t = sub_df.index - left_noon
+        right_delta_t = right_noon - sub_df.index
+        
+        if np.isnan(left_noon_val) or np.isnan(right_noon_val):
+            these_noon_values = pd.Series(np.nan, index=sub_df.index)
+            these_noon_values[left_delta_t < right_delta_t] = left_noon_val
+            these_noon_values[left_delta_t >= right_delta_t] = right_noon_val
         else:
-            raise ValueError('"{}" is not an allowed anomaly_type'.format(anomaly_type))
-                
-        # need to take the subset of columns on the RHS for both before subtracting to support 
-        # passing in a baseline dataframe that has the computed columns but not all of the 
-        # rest.
-        df.loc[xx, columns_to_compute] = (day_df.loc[:, columns_to_compute] - baseline_row[columns_to_compute].values)
-        baseline_df.loc[pd.Timestamp(solar_day), :] = baseline_row[columns_to_compute].values
-
-    pbar.finish()
-    if not inplace:
-        return df, baseline_df
-    else:
-        return baseline_df
-
-
-def get_solar_dates(times, lon=None, lat=None, observer=None, ):
-    if observer is None:
-        if lon is None or lat is None:
-            raise TypeError('Must provide either an observer or lat+lon')
-        observer = ephem.Observer()
-        observer.lat, observer.long = '{:.4f}'.format(lat), '{:.4f}'.format(lon)
-
-    sun = ephem.Sun()
-
-    solar_dates = np.full(times.shape, None)
-
-    inext = 0
-    while True:
-        last_sunrise = observer.previous_rising(sun, start=ephem.Date(times[inext])).datetime()
-        next_sunrise = observer.next_rising(sun, start=ephem.Date(times[inext])).datetime()
-        xx = (times >= last_sunrise) & (times < next_sunrise)
-        solar_dates[xx] = last_sunrise.date()
-        if next_sunrise > np.max(times):
-            break
-        else:
-            inext = np.flatnonzero(xx)[-1] + 1
-    return solar_dates
-
-
-def _find_solar_noon(day_df, observer, max_delta=pd.Timedelta(hours=1)):
-    sun = ephem.Sun()
-    noon = observer.next_transit(sun, start=ephem.Date(day_df.index[0])).datetime()
-    if np.abs(day_df.index - noon).min() > max_delta:
-        raise TimeOfDayError('No points within {} of solar noon ({} UTC)'.format(max_delta, noon))
-    return day_df.interpolate_to([noon], method='index')
+            wt = (right_delta_t / (right_noon - left_noon))**2
+            these_noon_values = left_noon_val * wt + right_noon_val * (1 - wt)
+        
+        dd = columns_ser.index.isin(sub_df.index)
+        baselines[dd] = these_noon_values.to_numpy()
+        anomalies[dd] = columns_ser[dd] - these_noon_values
+        
+    return anomalies, baselines
 
 
 def _limit_series(series, start, stop):
