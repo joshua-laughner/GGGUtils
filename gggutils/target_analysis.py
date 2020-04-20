@@ -11,6 +11,7 @@ from typing import Sequence, Union
 from ginput.common_utils import mod_utils
 
 from .runutils import find_by_glob
+from .readers import read_eof_csv
 from .exceptions import TimeMatchError
 
 
@@ -48,21 +49,6 @@ all_sites = tuple(_abbrev_to_subdir.keys())
 def is_outlier(y, zcut=2):
     xx = stats.zscore(np.abs(y)) < zcut
     return ~xx
-
-def read_eof_csv(csv_file: str, date_index=True, compute_date=True) -> pd.DataFrame:
-    """
-    Read a .eof.csv (engineering output file, comma-separated value format) file
-    :param csv_file: the path to the .eof.csv file
-    :return: a dataframe with all the information from the .eof.csv file, indexed with the dates of the measurments in
-     the file.
-    """
-    nhead = mod_utils.get_num_header_lines(csv_file)
-    df = pd.read_csv(csv_file, header=nhead - 1, sep=',')
-    if date_index:
-        df.set_index(df_ydh_to_dtind(df), inplace=True, verify_integrity=True)
-    elif compute_date:
-        df['date'] = df_ydh_to_dtind(df)
-    return df
 
 
 def read_eof_csv_by_sitedate(sitedate: str) -> pd.DataFrame:
@@ -126,28 +112,6 @@ def search_df_keys(df: pd.DataFrame, pattern: str, nocase: bool = True) -> Seque
     matches = [k for k in df.keys() if re.search(pattern, k, flags=re_flags)]
 
     return matches
-
-
-def ydh_to_timestamp(year: int, day: int, hour: Union[int, float]) -> pd.Timestamp:
-    """
-    Convert a single year, day, and fractional hour into a Pandas timestamp.
-
-    :param year: the year
-    :param day: the day of year, 1-based.
-    :param hour: the hour. May contain a fractional component and be negative.
-    :return: the datetime
-    """
-    return pd.Timestamp(year, 1, 1) + pd.Timedelta(days=day - 1, hours=hour)
-
-
-def df_ydh_to_dtind(df: pd.DataFrame) -> pd.DatetimeIndex:
-    """
-    Create a DatetimeIndex from a .eof.csv dataframe
-    :param df: a dataframe containing "year", "day" and "hour" columns that are the year, day-of-year (1-based), and
-     fractional hour of their rows.
-    :return: a DatetimeIndex with the corresponding datetimes.
-    """
-    return pd.DatetimeIndex([ydh_to_timestamp(int(y), d, h) for y, d, h in zip(df.year, df.day, df.hour)])
 
 
 _def_req_cols = ('flag', 'date', 'year', 'day', 'hour', 'column_o2', 'xluft', 'column_luft', 'xco2_ppm', 'column_co2')
