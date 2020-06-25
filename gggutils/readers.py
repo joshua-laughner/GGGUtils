@@ -1,3 +1,4 @@
+import netCDF4 as ncdf
 import pandas as pd
 import re
 from jllutils.fileops import ncio
@@ -31,8 +32,50 @@ def df_ydh_to_dtind(df: pd.DataFrame) -> pd.DatetimeIndex:
     return pd.DatetimeIndex([ydh_to_timestamp(int(y), d, h) for y, d, h in zip(df.year, df.day, df.hour)])
 
 
-def read_eof_csv(private_file: str, date_index: bool = True, compute_date: bool = True, 
-                 allowed_flags: Sequence[int] = (0,), dates: pd.DatetimeIndex = None) -> pd.DataFrame:
+def _read_private_nc(ncfile: str, date_index: bool = True):
+    df = ncio.ncdf_to_dataframe(ncfile, target_dim='time')
+    df.rename(columns={'time': 'date'}, inplace=True)
+    # By default the dataframe will have the time as the index since that was the index
+    # dimension. Reset this if that is not desired. The 'time' (now 'date') column is
+    # retained
+    if not date_index:
+        df.reset_index(drop=True, inplace=True)
+    
+    with ncdf.Dataset(ncfile) as ds:
+        # Read the spectrum name
+        if 'spectrum' in ds.variables:
+            df['spectrum'] = ds.variables['spectrum'][:]
+        
+        # Find all variables with _Encoding as an attribute -
+        # those are text variables
+        for varname, var in ds.variables.items():
+            if '_Encoding' in var.ncattrs():
+                df[varname] = var[:]
+                
+    return df
+
+
+def _read_eof_csv(eof_file: str, date_index: bool = True, compute_date: bool = True):
+    with open(eof_file, 'r') as robj:
+        line1 = robj.readline()
+        if ',' in line1:
+            line1 = line1.split(',')
+        else:
+            line1 = line1.split()
+        nhead = int(line1[0])
+    df = pd.read_csv(eof_file, header=nhead - 1, sep=',')
+
+
+    if date_index:
+        df.set_index(df_ydh_to_dtind(df), inplace=True, verify_integrity=True)
+    elif compute_date:
+        df['date'] = df_ydh_to_dtind(df)
+
+    return df
+
+
+def read_eng_file(private_file: str, date_index: bool = True, compute_date: bool = True, 
+                  allowed_flags: Sequence[int] = (0,), dates: pd.DatetimeIndex = None) -> pd.DataFrame:
     """Read a .eof.csv (engineering output file, comma-separated value format) file
 
     Parameters
@@ -61,22 +104,9 @@ def read_eof_csv(private_file: str, date_index: bool = True, compute_date: bool 
         dataframe with all the information from the .eof.csv file
     """
     if private_file.endswith('.nc') or private_file.endswith('.nc4'):
-        df = ncio.ncdf_to_dataframe(private_file, target_dim='time')
-        df.rename(columns={'time': 'date'}, inplace=True)
-        # By default the dataframe will have the time as the index since that was the index
-        # dimension. Reset this if that is not desired.
-        if not date_index:
-            df.reset_index(drop=True, inplace=True)
+        df = _read_private_nc(private_file, date_index=date_index)
     else:
-        with open(private_file, 'r') as robj:
-            nhead = int(robj.readline().split(',')[0])
-        df = pd.read_csv(private_file, header=nhead - 1, sep=',')
-
-
-        if date_index:
-            df.set_index(df_ydh_to_dtind(df), inplace=True, verify_integrity=True)
-        elif compute_date or dates is not None:
-            df['date'] = df_ydh_to_dtind(df)
+        df = _read_eof_csv(private_file, date_index=date_index, compute_date=compute_date)
     
     if allowed_flags is None or allowed_flags == 'all':
         xx = df['flag'] > -99 

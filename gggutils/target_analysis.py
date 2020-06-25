@@ -11,7 +11,7 @@ from typing import Sequence, Union
 from ginput.common_utils import mod_utils
 
 from .runutils import find_by_glob
-from .readers import read_eof_csv
+from .readers import read_eng_file
 from .exceptions import TimeMatchError
 
 
@@ -51,7 +51,7 @@ def is_outlier(y, zcut=2):
     return ~xx
 
 
-def read_eof_csv_by_sitedate(sitedate: str) -> pd.DataFrame:
+def read_eng_file_by_sitedate(sitedate: str) -> pd.DataFrame:
     """
     Read the .eof.csv file for a particular site and OCO-2 target date
 
@@ -68,7 +68,7 @@ def read_eof_csv_by_sitedate(sitedate: str) -> pd.DataFrame:
 
     eof_csv_files = glob(os.path.join(date_dir, '*.eof.csv'))
     if len(eof_csv_files) == 1:
-        return read_eof_csv(eof_csv_files[0])
+        return read_eng_file(eof_csv_files[0])
     elif len(eof_csv_files) == 0:
         raise IOError('No .eof.csv file found in {}'.format(date_dir))
     else:
@@ -91,7 +91,7 @@ def read_all_eofs_for_site(site_abbrev: str) -> pd.DataFrame:
     date_dirs = [os.path.basename(d) for d in date_dirs]
     indiv_dfs = []
     for ddir in date_dirs:
-        indiv_dfs.append(read_eof_csv_by_sitedate(ddir))
+        indiv_dfs.append(read_eng_file_by_sitedate(ddir))
 
     print('Read .eof.csvs from {}'.format(','.join(date_dirs)))
     return pd.concat(indiv_dfs, sort=False)
@@ -142,7 +142,7 @@ def match_test_to_delivered_data(site_abbrev: str, new_eof_csv_file: str, req_co
     :return: a combined dataframe that has both old and new data. Column names will be suffixed with "_old" and "_new",
      respectively. Only the columns specified by ``req_columns`` will be included.
     """
-    new_df = read_eof_csv(new_eof_csv_file)
+    new_df = read_eng_file(new_eof_csv_file)
     old_df = read_all_eofs_for_site(site_abbrev)
 
     # Not sure if there's a faster way to do this other than iterating through every single line and finding the
@@ -357,7 +357,7 @@ def load_all_adcfs(sites: Sequence[str], gas: str, ignore_missing: bool = True, 
     for site, site_df in iter_adcf_files(sites, gas, ignore_missing=ignore_missing):
         if req_num_spectra > 0:
             # Read the .eof.csv file to get the number of spectra per day that are good
-            eof_df = read_eof_csv(find_by_glob(os.path.join(test_root_dir, site, 'postproc', '*.eof.csv')))
+            eof_df = read_eng_file(find_by_glob(os.path.join(test_root_dir, site, 'postproc', '*.eof.csv')))
             xx_dates = pd.Series(False, index=site_df.index)
             for date in site_df.index:
                 xx_eof = (eof_df.year == date.year) & (eof_df.day == date.dayofyear)
