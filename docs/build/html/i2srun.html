@@ -1,0 +1,327 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>I2SRun - Utilities to run I2S in batch &mdash; GGGUtils 0.2.0 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script type="text/javascript" src="_static/jquery.js"></script>
+        <script type="text/javascript" src="_static/underscore.js"></script>
+        <script type="text/javascript" src="_static/doctools.js"></script>
+        <script type="text/javascript" src="_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="_static/graphviz.css" type="text/css" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="Welcome to GGGUtils’s documentation!" href="index.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home"> GGGUtils
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">I2SRun - Utilities to run I2S in batch</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#config-file">Config file</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#run-section">Run section</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#i2s-section">I2S section</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sites-section">Sites section</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">GGGUtils</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html">Docs</a> &raquo;</li>
+        
+      <li>I2SRun - Utilities to run I2S in batch</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/i2srun.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="i2srun-utilities-to-run-i2s-in-batch">
+<h1>I2SRun - Utilities to run I2S in batch<a class="headerlink" href="#i2srun-utilities-to-run-i2s-in-batch" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="config-file">
+<h2>Config file<a class="headerlink" href="#config-file" title="Permalink to this headline">¶</a></h2>
+<p>Here is an example config file:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">Run</span><span class="p">]</span>
+<span class="c1"># The directory where the data are linked to to run I2S/GGG</span>
+<span class="n">run_top_dir</span> <span class="o">=</span> <span class="o">/</span><span class="n">oco2</span><span class="o">-</span><span class="n">data</span><span class="o">/</span><span class="n">tccon</span><span class="o">-</span><span class="n">nobak</span><span class="o">/</span><span class="n">scratch</span><span class="o">/</span><span class="n">beta</span><span class="o">-</span><span class="n">test</span><span class="o">-</span><span class="n">spectra</span><span class="o">/</span><span class="n">rc1</span>
+
+<span class="p">[</span><span class="n">I2S</span><span class="p">]</span>
+<span class="mi">3</span> <span class="o">=</span> <span class="mi">0</span> <span class="c1"># do not save separated interferograms</span>
+<span class="mi">5</span> <span class="o">=</span> <span class="mi">0</span> <span class="c1"># do not save phase curves</span>
+<span class="mi">17</span> <span class="o">=</span> <span class="o">-</span><span class="mf">1.00</span> <span class="o">-</span><span class="mf">1.00</span>\<span class="n">n</span><span class="o">+</span><span class="mf">1.00</span> <span class="o">+</span><span class="mf">1.00</span> <span class="c1"># update the extremes allows for the igrams values</span>
+<span class="mi">21</span> <span class="o">=</span> <span class="mi">8388608</span> <span class="mi">8388608</span> <span class="c1">#update the max log-base-2 num igram points</span>
+<span class="mi">25</span> <span class="o">=</span> <span class="mf">0.001</span> <span class="mf">0.001</span> <span class="c1"># update the PCT threshold</span>
+
+<span class="p">[</span><span class="n">Sites</span><span class="p">]</span>
+<span class="p">[[</span><span class="n">pa</span><span class="p">]]</span>
+<span class="n">slices</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="n">site_root_dir</span> <span class="o">=</span> <span class="o">/</span><span class="n">oco2</span><span class="o">-</span><span class="n">data</span><span class="o">/</span><span class="n">tccon</span><span class="o">/</span><span class="n">data</span><span class="o">/</span><span class="n">parkfalls_ifs1</span>
+<span class="n">no_date_dir</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="n">subdir</span> <span class="o">=</span> <span class="o">.</span>
+<span class="n">slices_in_subdir</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="n">flimit_file</span> <span class="o">=</span> <span class="o">/</span><span class="n">home</span><span class="o">/</span><span class="n">jlaugh</span><span class="o">/</span><span class="n">GGG</span><span class="o">/</span><span class="n">from</span><span class="o">-</span><span class="n">matt</span><span class="o">/</span><span class="n">flimit</span><span class="o">-</span><span class="n">files</span><span class="o">/</span><span class="n">pa_flimit</span><span class="o">.</span><span class="n">i2s</span>
+
+<span class="p">[[[</span><span class="n">pa20140918</span><span class="p">]]]</span>
+<span class="n">i2s_input_file</span> <span class="o">=</span> <span class="o">/</span><span class="n">home</span><span class="o">/</span><span class="n">jlaugh</span><span class="o">/</span><span class="n">GGG</span><span class="o">/</span><span class="n">GGG2019</span><span class="o">-</span><span class="n">beta</span><span class="o">/</span><span class="n">rc1</span><span class="o">/</span><span class="n">i2s</span><span class="o">-</span><span class="n">run</span><span class="o">-</span><span class="n">files</span><span class="o">/</span><span class="nb">slice</span><span class="o">-</span><span class="n">i2s</span><span class="o">.</span><span class="n">pa20140918</span><span class="o">.</span><span class="ow">in</span>
+<span class="p">[[[</span><span class="n">pa20140925</span><span class="p">]]]</span>
+<span class="n">i2s_input_file</span> <span class="o">=</span> <span class="o">/</span><span class="n">home</span><span class="o">/</span><span class="n">jlaugh</span><span class="o">/</span><span class="n">GGG</span><span class="o">/</span><span class="n">GGG2019</span><span class="o">-</span><span class="n">beta</span><span class="o">/</span><span class="n">rc1</span><span class="o">/</span><span class="n">i2s</span><span class="o">-</span><span class="n">run</span><span class="o">-</span><span class="n">files</span><span class="o">/</span><span class="nb">slice</span><span class="o">-</span><span class="n">i2s</span><span class="o">.</span><span class="n">pa20140925</span><span class="o">.</span><span class="ow">in</span>
+<span class="p">[[[</span><span class="n">pa20140927</span><span class="p">]]]</span>
+<span class="n">i2s_input_file</span> <span class="o">=</span> <span class="o">/</span><span class="n">home</span><span class="o">/</span><span class="n">jlaugh</span><span class="o">/</span><span class="n">GGG</span><span class="o">/</span><span class="n">GGG2019</span><span class="o">-</span><span class="n">beta</span><span class="o">/</span><span class="n">rc1</span><span class="o">/</span><span class="n">i2s</span><span class="o">-</span><span class="n">run</span><span class="o">-</span><span class="n">files</span><span class="o">/</span><span class="nb">slice</span><span class="o">-</span><span class="n">i2s</span><span class="o">.</span><span class="n">pa20140927</span><span class="o">.</span><span class="ow">in</span>
+
+<span class="p">[[</span><span class="n">wg</span><span class="p">]]</span>
+<span class="n">slices</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="n">site_root_dir</span> <span class="o">=</span> <span class="o">/</span><span class="n">home</span><span class="o">/</span><span class="n">jlaugh</span><span class="o">/</span><span class="n">GGGData</span><span class="o">/</span><span class="n">WollongongTargetIgms</span><span class="o">/</span><span class="n">pseudo</span><span class="o">-</span><span class="n">target</span><span class="o">-</span><span class="n">dirs</span>
+<span class="n">no_date_dir</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="n">subdir</span> <span class="o">=</span> <span class="n">igms</span>
+<span class="n">slices_in_subdir</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="n">flimit_file</span> <span class="o">=</span> <span class="o">/</span><span class="n">home</span><span class="o">/</span><span class="n">jlaugh</span><span class="o">/</span><span class="n">GGG</span><span class="o">/</span><span class="n">from</span><span class="o">-</span><span class="n">matt</span><span class="o">/</span><span class="n">flimit</span><span class="o">-</span><span class="n">files</span><span class="o">/</span><span class="n">wg_flimit</span><span class="o">.</span><span class="n">i2s</span>
+<span class="p">[[[</span><span class="n">wg20140923</span><span class="p">]]]</span>
+<span class="n">i2s_input_file</span> <span class="o">=</span> <span class="o">/</span><span class="n">home</span><span class="o">/</span><span class="n">jlaugh</span><span class="o">/</span><span class="n">GGG</span><span class="o">/</span><span class="n">GGG2019</span><span class="o">-</span><span class="n">beta</span><span class="o">/</span><span class="n">rc1</span><span class="o">/</span><span class="n">i2s</span><span class="o">-</span><span class="n">run</span><span class="o">-</span><span class="n">files</span><span class="o">/</span><span class="n">opus</span><span class="o">-</span><span class="n">i2s</span><span class="o">.</span><span class="n">wg20140923</span><span class="o">.</span><span class="ow">in</span>
+<span class="p">[[[</span><span class="n">wg20160210</span><span class="p">]]]</span>
+<span class="n">i2s_input_file</span> <span class="o">=</span> <span class="o">/</span><span class="n">home</span><span class="o">/</span><span class="n">jlaugh</span><span class="o">/</span><span class="n">GGG</span><span class="o">/</span><span class="n">GGG2019</span><span class="o">-</span><span class="n">beta</span><span class="o">/</span><span class="n">rc1</span><span class="o">/</span><span class="n">i2s</span><span class="o">-</span><span class="n">run</span><span class="o">-</span><span class="n">files</span><span class="o">/</span><span class="n">opus</span><span class="o">-</span><span class="n">i2s</span><span class="o">.</span><span class="n">wg20160210</span><span class="o">.</span><span class="ow">in</span>
+<span class="p">[[[</span><span class="n">wg20170424</span><span class="p">]]]</span>
+<span class="n">i2s_input_file</span> <span class="o">=</span> <span class="o">/</span><span class="n">home</span><span class="o">/</span><span class="n">jlaugh</span><span class="o">/</span><span class="n">GGG</span><span class="o">/</span><span class="n">GGG2019</span><span class="o">-</span><span class="n">beta</span><span class="o">/</span><span class="n">rc1</span><span class="o">/</span><span class="n">i2s</span><span class="o">-</span><span class="n">run</span><span class="o">-</span><span class="n">files</span><span class="o">/</span><span class="n">opus</span><span class="o">-</span><span class="n">i2s</span><span class="o">.</span><span class="n">wg20170424</span><span class="o">.</span><span class="ow">in</span>
+</pre></div>
+</div>
+<p>Notice that this follows a somewhat expanded <a class="reference external" href="https://en.wikipedia.org/wiki/INI_file">INI format</a>. Sections are
+denoted by names enclosed in <code class="docutils literal notranslate"><span class="pre">[brackets]</span></code> with subsections enclosed in <code class="docutils literal notranslate"><span class="pre">[[multiple</span> <span class="pre">brackets]]</span></code>. In the above
+example, <code class="docutils literal notranslate"><span class="pre">[[pa]]</span></code> is a subsection of <code class="docutils literal notranslate"><span class="pre">[Sites]</span></code> and <code class="docutils literal notranslate"><span class="pre">[[[pa20140918]]]</span></code> a subsection of <code class="docutils literal notranslate"><span class="pre">[[pa]]</span></code>. Comments are
+allowed, both on their own and inline, beginning with a <code class="docutils literal notranslate"><span class="pre">#</span></code>. Details on the options for each section follow.</p>
+<div class="section" id="run-section">
+<h3>Run section<a class="headerlink" href="#run-section" title="Permalink to this headline">¶</a></h3>
+<p>This section controls the execution of I2S. Options that it must have are:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">run_top_dir</span></code> - this is a path to where run directories for I2S can be created.</p></li>
+</ul>
+</div>
+<div class="section" id="i2s-section">
+<h3>I2S section<a class="headerlink" href="#i2s-section" title="Permalink to this headline">¶</a></h3>
+<p>This section allows you to set options in the I2S input file. For each line, the key must be the parameter number
+and the value the value it should take. In the above example, the line <code class="docutils literal notranslate"><span class="pre">3</span> <span class="pre">=</span> <span class="pre">0</span></code> sets Parameter #3 (whether to save
+separated interferograms) to 0 for all I2S run files it creates in the run directories. If a parameter needs to be
+on two lines (like Parameter #17) indicate the line break with a <code class="docutils literal notranslate"><span class="pre">\n</span></code>.</p>
+</div>
+<div class="section" id="sites-section">
+<h3>Sites section<a class="headerlink" href="#sites-section" title="Permalink to this headline">¶</a></h3>
+<p>This section controls which sites and days are to be run and how to run them. It is organized into subsections by site
+ID, and sub-subsections by site ID + date in YYYYMMDD format. Each date to run must have the options listed below;
+however, it is set up so that if an option is not present in the date sub-subsection, it is read from the site
+subsection. As an example, consider:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[[</span><span class="n">pa</span><span class="p">]]</span>
+<span class="n">flimit_file</span> <span class="o">=</span> <span class="o">/</span><span class="n">home</span><span class="o">/</span><span class="n">jlaugh</span><span class="o">/</span><span class="n">GGG</span><span class="o">/</span><span class="n">from</span><span class="o">-</span><span class="n">matt</span><span class="o">/</span><span class="n">flimit</span><span class="o">-</span><span class="n">files</span><span class="o">/</span><span class="n">pa_flimit</span><span class="o">.</span><span class="n">i2s</span>
+
+<span class="p">[[[</span><span class="n">pa20140918</span><span class="p">]]]</span>
+<span class="n">i2s_input_file</span> <span class="o">=</span> <span class="o">/</span><span class="n">home</span><span class="o">/</span><span class="n">jlaugh</span><span class="o">/</span><span class="n">GGG</span><span class="o">/</span><span class="n">GGG2019</span><span class="o">-</span><span class="n">beta</span><span class="o">/</span><span class="n">rc1</span><span class="o">/</span><span class="n">i2s</span><span class="o">-</span><span class="n">run</span><span class="o">-</span><span class="n">files</span><span class="o">/</span><span class="nb">slice</span><span class="o">-</span><span class="n">i2s</span><span class="o">.</span><span class="n">pa20140918</span><span class="o">.</span><span class="ow">in</span>
+<span class="n">flimit_file</span> <span class="o">=</span> <span class="o">/</span><span class="n">home</span><span class="o">/</span><span class="n">tccon</span><span class="o">/</span><span class="n">defaults</span><span class="o">/</span><span class="n">std_pa_flimit</span><span class="o">.</span><span class="n">i2s</span>
+<span class="p">[[[</span><span class="n">pa20140925</span><span class="p">]]]</span>
+<span class="n">i2s_input_file</span> <span class="o">=</span> <span class="o">/</span><span class="n">home</span><span class="o">/</span><span class="n">jlaugh</span><span class="o">/</span><span class="n">GGG</span><span class="o">/</span><span class="n">GGG2019</span><span class="o">-</span><span class="n">beta</span><span class="o">/</span><span class="n">rc1</span><span class="o">/</span><span class="n">i2s</span><span class="o">-</span><span class="n">run</span><span class="o">-</span><span class="n">files</span><span class="o">/</span><span class="nb">slice</span><span class="o">-</span><span class="n">i2s</span><span class="o">.</span><span class="n">pa20140925</span><span class="o">.</span><span class="ow">in</span>
+</pre></div>
+</div>
+<p>2014-09-18 would use the flimit file <code class="docutils literal notranslate"><span class="pre">/home/tccon/defaults/std_pa_flimit.i2s</span></code> because the <code class="docutils literal notranslate"><span class="pre">flimit_file</span></code> value in
+that specific subsection takes precedence. However, since 2014-09-25 does not include the <code class="docutils literal notranslate"><span class="pre">flimit_file</span></code> option, I2SRun
+goes up one level to the <code class="docutils literal notranslate"><span class="pre">[[pa]]</span></code> section and uses the <code class="docutils literal notranslate"><span class="pre">flimit_file</span></code> value there, in this case,
+<code class="docutils literal notranslate"><span class="pre">/home/jlaugh/GGG/from-matt/flimit-files/pa_flimit.i2s</span></code>.</p>
+<p>The required options are:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">slices</span></code> - whether this site uses slices or Opus interferograms. Must be a boolean value: <code class="docutils literal notranslate"><span class="pre">True</span></code> or <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">site_root_dir</span></code> - root directory where interferograms or slices for this site can be found. Because I2SRun was
+originally built for OCO-2 targets, it assumes a certain directory structure, which will be discussed more below.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">no_date_dir</span></code> - whether the interferograms or slices are organized by date under the <code class="docutils literal notranslate"><span class="pre">site_root_dir</span></code>. Must be a
+boolean value: <code class="docutils literal notranslate"><span class="pre">True</span></code> or <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">subdir</span></code> - the subdirectory under the site root directory and/or date subdirectory where the interferograms or
+slices are actually found.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">slices_in_subdir</span></code> - only matters if processing slices. Generally we assume that slices are organized under the
+subdirectory into <code class="file docutils literal notranslate"><span class="pre">YYMMDD.R/scan</span></code> directories (where YY is the year, MM the month, DD the day, and R the run
+number). This directory structure is automatically deduced. However, if your slices are <em>not</em> organized in this
+manner, then you can set this option to <code class="docutils literal notranslate"><span class="pre">True</span></code> to indicate that the slice files are to be found directly in the
+subdir. Examples below.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">flimit_file</span></code> - path to the flimit file to use for I2S. Will be copied into the run directories.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">i2s_input_file</span></code> - path to the I2S input file to use to run I2S. This option should be in the date-specific
+sub-subsection to make any sense.</p></li>
+</ul>
+<p>In the following examples, we will use <code class="docutils literal notranslate"><span class="pre">site_root_dir</span> <span class="pre">=</span> <span class="pre">/data/site</span></code> and <code class="docutils literal notranslate"><span class="pre">subdir</span> <span class="pre">=</span> <span class="pre">igrams</span></code>. First we will examine
+the case where <code class="docutils literal notranslate"><span class="pre">slices</span></code> is <code class="docutils literal notranslate"><span class="pre">False</span></code>, i.e. we’re processing Opus interferograms.</p>
+<ul class="simple">
+<li><p>If <code class="docutils literal notranslate"><span class="pre">no_date_dir</span></code> is <code class="docutils literal notranslate"><span class="pre">True</span></code>, then interferograms are expected to be in <code class="docutils literal notranslate"><span class="pre">$ROOT/$SUBDIR</span></code> e.g.
+<code class="file docutils literal notranslate"><span class="pre">/data/site/igrams</span></code></p></li>
+<li><p>If <code class="docutils literal notranslate"><span class="pre">no_date_dir</span></code> is <code class="docutils literal notranslate"><span class="pre">False</span></code>, then interferograms are expected to be in <code class="docutils literal notranslate"><span class="pre">$ROOT/$DATEDIR/$SUBDIR</span></code>, e.g.
+<code class="file docutils literal notranslate"><span class="pre">/data/site/wg20180101/igrams</span></code>, where <code class="docutils literal notranslate"><span class="pre">wg20180101</span></code> came from the date sub-subsection name.</p></li>
+</ul>
+<p>If <code class="docutils literal notranslate"><span class="pre">slices</span></code> is <code class="docutils literal notranslate"><span class="pre">True</span></code>, then:</p>
+<ul class="simple">
+<li><p>The same rules for <code class="docutils literal notranslate"><span class="pre">no_date_dir</span></code> apply, that is, the front of the path is either <code class="docutils literal notranslate"><span class="pre">$ROOT/$SUBDIR</span></code> or
+<code class="docutils literal notranslate"><span class="pre">$ROOT/$DATEDIR/$SUBDIR</span></code>. Whichever is the case, call that <code class="docutils literal notranslate"><span class="pre">$DATADIR</span></code>.</p></li>
+<li><p>Then, if <code class="docutils literal notranslate"><span class="pre">slices_in_subdir</span></code> is <code class="docutils literal notranslate"><span class="pre">False</span></code>, the slices are assumed to be in <code class="docutils literal notranslate"><span class="pre">$DATADIR/YYMMDD.R/scan</span></code>.</p></li>
+<li><p>If <code class="docutils literal notranslate"><span class="pre">slices_in_subdir</span></code> is <code class="docutils literal notranslate"><span class="pre">True</span></code>, then the slices are assumed to be in <code class="docutils literal notranslate"><span class="pre">$DATADIR</span></code> directly.</p></li>
+</ul>
+</div>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+      
+        <a href="index.html" class="btn btn-neutral float-left" title="Welcome to GGGUtils’s documentation!" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, Joshua Laughner
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>
