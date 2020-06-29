@@ -3,15 +3,12 @@ from configobj import ConfigObj
 import datetime as dt
 from glob import glob
 from logging import getLogger
-from matplotlib import pyplot as plt
-from matplotlib.backends.backend_pdf import PdfPages
 from multiprocessing import Pool
 import os
 import re
 import shutil
 from subprocess import Popen
 import sys
-
 from textui import uielements
 
 from . import _i2s_halt_file
@@ -1415,6 +1412,8 @@ def plot_rough_spectra(cfg_file, save_dir, plots_per_page=4, overwrite=True):
 
     :return: none
     """
+    from matplotlib import pyplot as plt
+    from matplotlib.backends.backend_pdf import PdfPages
 
     cfg = load_config_file(cfg_file)
     for run_dir, datestr in iter_i2s_dirs(cfg, incl_datestr=True):

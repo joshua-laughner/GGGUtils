@@ -8,7 +8,7 @@ setup(
     license='',
     author='Joshua Laughner',
     author_email='jlaugh@caltech.edu',
-    install_requires=['textui'],
+    install_requires=['textui', 'configobj'],
     description='Ancilliary utilities to run GGG',
     entry_points={
         'console_scripts': ['gggutils=gggutils.console_main:main']
