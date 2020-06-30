@@ -18,7 +18,7 @@ from .runutils import iter_i2s_dirs, load_config_file, date_subdir, get_date_cfg
 logger = getLogger('i2srun')
 
 
-def build_cfg_file(cfg_file, i2s_input_files, old_cfg_file=None):
+def build_cfg_file(cfg_file, i2s_input_files, old_cfg_file=None, relpaths=False):
     """
     Build a starting config file specifying where the data are to run I2S for a large number of sites/days.
 
@@ -49,9 +49,10 @@ def build_cfg_file(cfg_file, i2s_input_files, old_cfg_file=None):
     # now make the site sections. include the default options for each group, then make each input date a subsection
     # with by default just the input file options
     grouped_files = _group_i2s_input_files(i2s_input_files)
+    relative_to = os.path.dirname(cfg_file) if relpaths else None
 
     for site, site_dict in grouped_files.items():
-        slices, subdir = _group_uses_slices(site_dict)
+        slices, subdir = _group_uses_slices(site_dict, relative_to=relative_to)
         site_opts = {'slices': slices,
                      'site_root_dir': '',
                      'no_date_dir': '0',
@@ -59,7 +60,8 @@ def build_cfg_file(cfg_file, i2s_input_files, old_cfg_file=None):
                      'slices_in_subdir': '0',
                      'flimit_file': ''}
         for site_date, input_file in site_dict.items():
-            site_opts[site_date] = {'i2s_input_file': os.path.abspath(input_file)}
+            path = input_file if relpaths else os.path.abspath(input_file)
+            site_opts[site_date] = {'i2s_input_file': path}
         cfg['Sites'][site] = site_opts
 
     if old_cfg_file is not None:
@@ -107,6 +109,260 @@ def update_cfg_run_files(cfg_file, i2s_run_files, keep_missing=False, new_cfg_fi
                 site_dict[datestr]['i2s_input_file'] = site_files[datestr]
 
     cfg.write()
+
+
+def _concat_i2s_run_files(i2s_files, last_header_param=runutils._default_last_header_param, parse_run_lines=True):
+    """
+    Concatenate scans from multiple I2S input files into a single list
+
+    The header is always drawn from the first I2S input file.
+
+    :param i2s_files: list of I2S input files to combine
+    :type i2s_files: path-like
+
+    :param last_header_param: number of general I2S parameters before the individual scans start in the I2S input files.
+    :type last_header_param: int
+
+    :param parse_run_lines: whether to parse the run lines into dicts or leave as strings
+    :type parse_run_lines: bool
+
+    :returns: list of header lines and list of run lines
+    """
+    # Read all the header info from the first file
+    header_lines = []
+    with open(i2s_files[0]) as robj:
+        for param_num, subparam_num, value, comment, is_param in runutils.iter_i2s_input_params(robj, include_all_lines=True):
+            if param_num > last_header_param:
+                break
+
+            if len(comment) > 0:
+                value += ':' + comment
+            header_lines.append(value.rstrip())
+
+    # Iterate over all files and join their run lines together into a single list
+    run_lines = []
+    for fname in i2s_files:
+        _, these_run_lines = runutils.read_i2s_input_params(fname, last_header=last_header_param,
+                                                            verbatim_run_lines=not parse_run_lines)
+        ok, nfirst, nbad, bad_index = _check_run_lines(these_run_lines)
+        if not ok:
+            raise IOError('Inconsistent number of elements in run lines of {file}: first line had {n} but the {i}th '
+                          'line had {nbad}'.format(file=fname, n=nfirst, nbad=nbad, i=bad_index+1))
+        run_lines += these_run_lines
+        logger.info('{} scans found in {}'.format(len(these_run_lines), fname))
+
+    return header_lines, run_lines
+
+
+def create_header_and_full_scan_list(i2s_files, header_file, scan_list_file,
+                                     last_header_param=runutils._default_last_header_param):
+    """
+    Create two files: I2S header and scan catalog from a collection of I2S input files
+
+    The header is always drawn from the first I2S input file.
+
+    :param i2s_files: list of I2S input files to combine
+    :type i2s_files: path-like
+
+    :param header_file: path to write the header file to
+    :type header_file: path-like
+
+    :param scan_list_file: path to write the list of scans to
+    :type scan_list_file: path-like
+
+    :param last_header_param: number of general I2S parameters before the individual scans start in the I2S input files.
+    :type last_header_param: int
+    """
+    header_lines, run_lines = _concat_i2s_run_files(i2s_files, last_header_param=last_header_param, parse_run_lines=False)
+    with open(header_file, 'w') as hobj:
+        hobj.write('\n'.join(header_lines))
+    with open(scan_list_file, 'w') as sobj:
+        sobj.write('\n'.join(run_lines))
+
+
+def _split_run_lines_by(run_lines, site, group_by):
+    """
+    Split up run lines into time periods
+
+    :param run_lines: list of run lines
+    :type run_lines: Sequence[str]
+
+    :param site: two-letter site ID to use in the date strings
+    :type site: str
+
+    :param group_by: which
+    """
+    def make_split_key(year, month, day):
+        year = int(year)
+        month = int(month)
+        day = int(day)
+
+        if group_by == 'Y':
+            return '{}{:04d}'.format(site, year)
+        elif group_by == 'M':
+            return '{}{:04d}{:02d}'.format(site, year, month)
+        elif group_by == 'D':
+            return '{}{:04d}{:02d}{:02d}'.format(site, year, month, day)
+        else:
+            raise ValueError('Unexpected value for `key`: "{}"'.format(group_by))
+
+    def group(info_dict):
+        if group_by == 'Y':
+            return info_dict['year']
+        elif group_by == 'M':
+            return info_dict['year'], info_dict['month']
+        elif group_by == 'D':
+            return info_dict['year'], info_dict['month'], info_dict['day']
+
+    splits = dict()
+    current = []
+    last_info = None
+    for line in run_lines:
+        info = runutils.parse_run_line(line)
+        value = group(info)
+        if last_info is not None and value != last_info[group_by]:
+            k = make_split_key(last_info['year'], last_info['month'], last_info['day'])
+            splits[k] = current
+            current = []
+
+        current.append(line)
+        last_info = info
+
+    k = make_split_key(info['year'], info['month'], info['day'])
+    splits[k] = current
+    return splits
+
+
+def _get_run_line_length(line):
+    """
+    Get the canonical length of a run line, whether given as a string or dictionary.
+    """
+    if isinstance(line, str):
+        return len(runutils.parse_run_line(line))
+    else:
+        return len(line)
+
+
+def _check_run_lines(run_lines):
+    """
+    Check that a list of run lines (as strings or dicts) all have the same length
+
+    :return: True/False (whether the lines all match), number of elements in the first line, number of elements in the
+     first *bad* line, and index of the first bad line. If all lines match, then the last two return values are the
+     number of elements in the first line and ``None``.
+    """
+    n = _get_run_line_length(run_lines[0])
+    for i, line in enumerate(run_lines):
+        m = _get_run_line_length(line)
+        if m != n:
+            return False, n, m, i
+
+    return True, n, n, None
+
+
+def _build_cfg_by_split(output_dir, site_id, header_lines, run_lines, is_slices, split='D'):
+    """
+    Build a config file with scans split up into days, months, or years.
+    """
+    split_run_lines = _split_run_lines_by(run_lines, site_id, split)
+    slice_or_opus = 'slice' if is_slices else 'opus'
+
+    # Create input files first, then build the config. Since input files can be relative to the config file, we don't
+    # need to mess with making absolute paths
+    input_files = []
+    for datestr, date_run_lines in split_run_lines.items():
+        input_file_basename = '{datestr}.{type}-i2s.in'.format(datestr=datestr, type=slice_or_opus)
+        input_file_fullname = os.path.join(output_dir, input_file_basename)
+        input_files.append(input_file_basename)
+
+        with open(input_file_fullname, 'w') as wobj:
+            wobj.write('\n'.join(header_lines) + '\n')
+            wobj.write('\n'.join(date_run_lines))
+
+    build_cfg_file(os.path.join(output_dir, 'i2s_parallel.cfg'), input_files, relpaths=True)
+
+
+def build_cfg_from_many_inputs(i2s_input_files, site_id, output_dir, split_by='D', is_slices=None,
+                               last_param_num=runutils._default_last_header_param):
+    """
+    Build a config file from many I2S input files.
+
+    This assumes that you have many I2S input files but want them reorganized into sensible splits (by day, month, or
+    year) for parallelization.
+
+    :param i2s_input_files: list of paths to I2S input files
+    :type i2s_input_files: Sequence[path-like]
+
+    :param site_id: the two-letter site ID for this header/scan combination.
+    :type site_id: str
+
+    :param output_dir: directory to save the I2S input files and the config file to.
+    :type output_dir: str
+
+    :param split_by: how to split the I2S data for parallelization. Options are 'D' (daily), 'M' (monthly) or 'Y'
+     (yearly)
+    :type split_by: str
+
+    :param is_slices: whether the scans are slices or full Opus interferograms. If this is ``None``, then this is
+     inferred from the scan catalog.
+    :type is_slices: bool
+
+    :param last_param_num: number of general I2S parameters before the individual scans start in the I2S input files.
+    :type last_param_num: int
+    """
+    if is_slices is None:
+        is_slices = runutils.i2s_use_slices(i2s_input_files[0])
+    header_lines, run_lines = _concat_i2s_run_files(i2s_input_files, parse_run_lines=False,
+                                                    last_header_param=last_param_num)
+
+    ok, n, nbad, bad_index = _check_run_lines(run_lines)
+    if not ok:
+        raise IOError('Inconsistent numbers of elements in run lines of input files: the first line of {file1} had {n} '
+                      'elements but the {i}th line read in had {nbad}'
+                      .format(n=n, file1=i2s_input_files[0], i=bad_index+1, nbad=nbad))
+    _build_cfg_by_split(output_dir=output_dir, site_id=site_id, header_lines=header_lines, run_lines=run_lines,
+                        is_slices=is_slices, split=split_by)
+
+
+def build_cfg_from_header_scan_list(header_file, scan_list, site_id, output_dir, split_by='D', is_slices=None):
+    """
+    Build an i2srun config file from a file containing the input header lines and one containing the catalog of scans
+
+    :param header_file: path to the file with the header lines (general I2S parameters)
+    :type header_file: path-like
+
+    :param scan_list: path to the file with the catalog of scans to process
+    :type scan_list: path-like
+
+    :param site_id: the two-letter site ID for this header/scan combination.
+    :type site_id: str
+
+    :param output_dir: directory to save the I2S input files and the config file to.
+    :type output_dir: str
+
+    :param split_by: how to split the I2S data for parallelization. Options are 'D' (daily), 'M' (monthly) or 'Y'
+     (yearly)
+    :type split_by: str
+
+    :param is_slices: whether the scans are slices or full Opus interferograms. If this is ``None``, then this is
+     inferred from the scan catalog.
+    :type is_slices: bool
+    """
+    if is_slices is None:
+        is_slices = runutils.i2s_use_slices(scan_list, last_header=0)
+
+    with open(header_file) as hobj:
+        header_lines = [l.strip() for l in hobj]
+    with open(scan_list) as sobj:
+        run_lines = [l.strip() for l in sobj]
+
+    ok, n, nbad, bad_index = _check_run_lines(run_lines)
+    if not ok:
+        raise IOError('Inconsistent numbers of elements in scan list: the first line had {n} but the {i}th line had '
+                      '{nbad}.'.format(n=n, nbad=nbad, i=bad_index))
+
+    _build_cfg_by_split(output_dir=output_dir, site_id=site_id, header_lines=header_lines, run_lines=run_lines,
+                        is_slices=is_slices, split=split_by)
 
 
 def make_one_i2s_run_file(target_data_dir, run_files, run_file_save_dir=None, overwrite=False, slice_dir='slices'):
@@ -1104,7 +1360,7 @@ def _make_link(src, dst, overwrite=False, **kwargs):
     os.symlink(src, dst, **kwargs)
 
 
-def _group_uses_slices(site_dict):
+def _group_uses_slices(site_dict, relative_to=None):
     """
     Guess whether a site uses slices or full interferograms
 
@@ -1117,6 +1373,8 @@ def _group_uses_slices(site_dict):
     """
     n_using_slices = 0
     for input_file in site_dict.values():
+        if relative_to is not None:
+            input_file = os.path.join(relative_to, input_file)
         n_using_slices += runutils.i2s_use_slices(input_file)
 
     if n_using_slices > 0.5 * len(site_dict):
@@ -1141,13 +1399,13 @@ def _group_i2s_input_files(input_files):
     :type input_files: list(str)
 
     :return: a two-level dictionary where the first level's keys are the site abbreviations and the second level's are
-     the xxYYYYMMDD date strings.
+     the xxYYYY, xxYYYYMM, or xxYYYYMMDD date strings.
     :rtype: dict
     """
     group_dict = dict()
     for f in input_files:
         fname = os.path.basename(f)
-        site_date = re.search(r'(?P<site>\w\w)(?P<date>\d{8})', fname)
+        site_date = re.search(r'(?P<site>\w\w)(?P<date>\d{4,8})', fname)
         if site_date is None:
             raise ValueError('{} does not contain a site abbreviation + date string in its name'.format(f))
 
@@ -1270,6 +1528,59 @@ def _check_slice_links(run_directory, run_file):
     return missing_slices
 
 
+def _find_input_file(run_dir):
+    """
+    Find the I2S input file in a directory
+
+    :param run_dir: directory to find an I2S input file in. Must contain a single file matching the pattern
+     ``*i2s*.in``.
+    :type run_dir: path-like
+
+    :return: basename of the input file
+    :rtype: str
+    """
+    possible_input_files = [os.path.basename(f) for f in glob(os.path.join(run_dir, '*i2s*.in'))]
+    if len(possible_input_files) > 1:
+        raise RuntimeError('Multiple I2S input files found in {}: {}'.format(
+            run_dir, ', '.join(possible_input_files))
+        )
+    elif len(possible_input_files) == 0:
+        raise RuntimeError('No I2S input files found in {}'.format(run_dir))
+    else:
+        return possible_input_files[0]
+
+
+def create_i2s_parallel_run_file(cfg_file, run_file):
+    """
+    Create file that can be used to run I2S with the GNU parallel utility
+
+    :param cfg_file: path to the i2srun configuration file that determines where to run I2S
+    :type cfg_file: path-like
+
+    :param run_file: path to write the run file for GNU parallel
+    :type run_file: path-like
+    """
+    cfg = load_config_file(cfg_file)
+
+    gggpath = os.getenv('GGGPATH')
+    if gggpath is None:
+        raise exceptions.GGGPathException('GGGPATH is not set. It must be set to use gggrun.')
+    i2s_cmd = os.path.join(gggpath, 'bin', 'i2s')
+    if not os.path.exists(i2s_cmd):
+        raise exceptions.GGGPathException('{} is not valid path. Please confirm your GGGPATH variable points to a '
+                                          'valid install of GGG.'.format(i2s_cmd))
+
+    with open(run_file, 'w') as wobj:
+        for site in cfg['Sites'].sections:
+            site_cfg = cfg['Sites'][site]
+            for datestr in site_cfg.sections:
+                this_run_dir = date_subdir(cfg, site, datestr)
+                input_file = _find_input_file(this_run_dir)
+                wobj.write('cd {rundir} && {i2s} {infile} > i2s.log\n'.format(
+                    rundir=this_run_dir, i2s=i2s_cmd, infile=input_file
+                ))
+
+
 def run_all_i2s(cfg_file, n_procs=1, dry_run=False):
     """
     Run I2S for all days specified in a config file
@@ -1330,15 +1641,7 @@ def _run_one_i2s(run_dir, i2s_cmd, dry_run):
         return
 
     old_spectra = _list_completed_spectra(run_dir)
-    possible_input_files = [os.path.basename(f) for f in glob(os.path.join(run_dir, '*i2s*.in'))]
-    if len(possible_input_files) > 1:
-        raise RuntimeError('Multiple I2S input files found in {}: {}'.format(
-            run_dir, ', '.join(possible_input_files))
-        )
-    elif len(possible_input_files) == 0:
-        raise RuntimeError('No I2S input files found in {}'.format(run_dir))
-    else:
-        i2s_input_file = possible_input_files[0]
+    i2s_input_file = _find_input_file(run_dir)
 
     now = dt.datetime.now()
     log_file = os.path.join(run_dir, 'run_i2s_{}.log'.format(now.strftime('%Y%m%dT%H%M%S')))

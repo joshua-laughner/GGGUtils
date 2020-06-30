@@ -161,19 +161,44 @@ def _mod_i2s_args_parsing(args):
         return check_dict_fmt(dict_out)
 
 
-def read_i2s_input_params(infile, last_header=_default_last_header_param):
-    def parse_run_line(line):
-        line = line.split()
-        if len(line) == _run_cols_for_slices:
-            keys = ('year', 'month', 'day', 'run', 'slice')
-        elif len(line) <= _run_cols_for_full:
-            keys = ('opus_file', 'year', 'month', 'day', 'run', 'lat', 'lon', 'alt', 'Tins', 'Pins', 'Hins',
-                    'Tout', 'Pout', 'Hout', 'SIA', 'FVSI', 'WSPD', 'WDIR')
-        else:
-            raise exceptions.I2SFormatException('I2S input file ({}) had {} columns for the igram list, expected '
-                                                'no more than {}'
-                                                .format(infile, len(line), _run_cols_for_full))
-        return {k: v for k, v in zip(keys, line)}
+def parse_run_line(line, infile=None):
+    line = line.split()
+    if len(line) == _run_cols_for_slices:
+        keys = ('year', 'month', 'day', 'run', 'slice')
+    elif len(line) <= _run_cols_for_full:
+        keys = ('opus_file', 'year', 'month', 'day', 'run', 'lat', 'lon', 'alt', 'Tins', 'Pins', 'Hins',
+                'Tout', 'Pout', 'Hout', 'SIA', 'FVSI', 'WSPD', 'WDIR')
+    elif infile is None:
+        raise exceptions.I2SFormatException('The following line had {} columns for the igram list, expected '
+                                            'no more than {}:\n{}'
+                                            .format(len(line), _run_cols_for_full, line))
+    else:
+        raise exceptions.I2SFormatException('I2S input file ({}) had {} columns for the igram list, expected '
+                                            'no more than {}'
+                                            .format(infile, len(line), _run_cols_for_full))
+    return {k: v for k, v in zip(keys, line)}
+
+
+def read_i2s_input_params(infile, last_header=_default_last_header_param, verbatim_run_lines=False):
+    """
+    Read and parse an I2S input file
+
+    :param infile: the path to the I2S file to parse
+    :type infile: path-like
+
+    :param last_header: the number of header parameters. Non-comment lines after this one are treated as run lines, i.e.
+     lines that specify a scan to process.
+    :type last_header: int
+
+    :param verbatim_run_lines: controls how the run lines are returned. The default (``False``) is that they are parsed
+     into dictionaries. Set this to ``True`` to keep them as plain strings, just with leading and trailing whitespace
+     stripped.
+    :type verbatim_run_lines: bool
+
+    :return: two lists, one of header values and one of run lines. The latter will be dicts or strings, depending on
+     ``verbatim_run_lines``.
+    """
+
 
     header_params = []
     run_files = []
@@ -185,8 +210,10 @@ def read_i2s_input_params(infile, last_header=_default_last_header_param):
                     header_params.append(value)
                 else:
                     header_params[paramnum-1] += '\n'+value
+            elif verbatim_run_lines:
+                run_files.append(value)
             else:
-                run_files.append(parse_run_line(value))
+                run_files.append(parse_run_line(value, infile))
 
     return header_params, run_files
 
@@ -209,8 +236,8 @@ def slice_date_subdir(date, run):
     return '{}.{}'.format(date.strftime('%y%m%d'), run)
 
 
-def i2s_use_slices(infile):
-    _, igrams = read_i2s_input_params(infile)
+def i2s_use_slices(infile, last_header=_default_last_header_param):
+    _, igrams = read_i2s_input_params(infile, last_header=last_header)
     if len(igrams) == 0:
         raise exceptions.I2SFormatException('I2S intput file ({}) has no igrams listed, cannot tell if uses slices or full igrams'.format(infile))
     n = len(igrams[0])
