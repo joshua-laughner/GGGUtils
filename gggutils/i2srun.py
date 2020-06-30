@@ -1550,7 +1550,7 @@ def _find_input_file(run_dir):
         return possible_input_files[0]
 
 
-def create_i2s_parallel_run_file(cfg_file, run_file):
+def create_i2s_parallel_run_file(cfg_file, run_file, abspaths=False):
     """
     Create file that can be used to run I2S with the GNU parallel utility
 
@@ -1559,6 +1559,10 @@ def create_i2s_parallel_run_file(cfg_file, run_file):
 
     :param run_file: path to write the run file for GNU parallel
     :type run_file: path-like
+
+    :param abspaths: if ``False``, makes the paths in the run file relative to the run file's location. Otherwise, they
+     are absolute.
+    :type abspaths: bool
     """
     cfg = load_config_file(cfg_file)
 
@@ -1570,11 +1574,16 @@ def create_i2s_parallel_run_file(cfg_file, run_file):
         raise exceptions.GGGPathException('{} is not valid path. Please confirm your GGGPATH variable points to a '
                                           'valid install of GGG.'.format(i2s_cmd))
 
+    run_file_dir = os.path.dirname(run_file)
     with open(run_file, 'w') as wobj:
         for site in cfg['Sites'].sections:
             site_cfg = cfg['Sites'][site]
             for datestr in site_cfg.sections:
                 this_run_dir = date_subdir(cfg, site, datestr)
+                if abspaths:
+                    this_run_dir = os.path.abspath(this_run_dir)
+                else:
+                    this_run_dir = os.path.relpath(this_run_dir, run_file_dir)
                 input_file = _find_input_file(this_run_dir)
                 wobj.write('cd {rundir} && {i2s} {infile} > i2s.log\n'.format(
                     rundir=this_run_dir, i2s=i2s_cmd, infile=input_file
@@ -1897,7 +1906,8 @@ def parse_build_cfg_many_args(parser):
                                            'input files.')
     parser.add_argument('i2s_input_files', nargs='+', help='The original I2S input files to merge and re-split')
     parser.add_argument('-s', '--split-by', default='D', choices=('D', 'M', 'Y'),
-                        help='How to split up the I2S runs for parallelization. D = daily, M = monthly, Y = yearly.')
+                        help='How to split up the I2S runs for parallelization. D = daily, M = monthly, Y = yearly. '
+                             'Default is %(default)s.')
     grp = parser.add_mutually_exclusive_group()
     grp.add_argument('--is-slices', action='store_const', const=True, default=None,
                      help='Indicates that the interferograms are slices. If not specified, then i2srun will '
@@ -1922,7 +1932,8 @@ def parse_build_cfg_header_catalog_args(parser):
                                             'scan catalog).')
     parser.add_argument('scan_list', help='The path to the scan catalog file.')
     parser.add_argument('-s', '--split-by', default='D', choices=('D', 'M', 'Y'),
-                        help='How to split up the I2S runs for parallelization. D = daily, M = monthly, Y = yearly.')
+                        help='How to split up the I2S runs for parallelization. D = daily, M = monthly, Y = yearly. '
+                             'Default is %(default)s')
     grp = parser.add_mutually_exclusive_group()
     grp.add_argument('--is-slices', action='store_const', const=True, default=None,
                      help='Indicates that the interferograms are slices. If not specified, then i2srun will '
@@ -2064,6 +2075,8 @@ def parse_i2s_par_file_args(parser):
     parser.description = 'Create a file that can be used with GNU parallel to run I2S in parallel'
     parser.add_argument('cfg_file', help='Path to the i2srun config file to base the parallel file on.')
     parser.add_argument('run_file', help='Path to write the parallel run file to')
+    parser.add_argument('-a', '--abspaths', action='store_true',
+                        help='Make the paths in the run file absolute, rather than relative to the run file location.')
     parser.set_defaults(driver_fxn=create_i2s_parallel_run_file)
 
 
