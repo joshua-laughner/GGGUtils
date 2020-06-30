@@ -220,7 +220,7 @@ def _split_run_lines_by(run_lines, site, group_by):
     for line in run_lines:
         info = runutils.parse_run_line(line)
         value = group(info)
-        if last_info is not None and value != last_info[group_by]:
+        if last_info is not None and value != group(last_info):
             k = make_split_key(last_info['year'], last_info['month'], last_info['day'])
             splits[k] = current
             current = []
@@ -1869,6 +1869,14 @@ def parse_mod_run_files_args(parser):
     parser.set_defaults(driver_fxn=_cl_mod_runfile_driver)
 
 
+def parse_header_catalog_args(parser):
+    parser.description = 'Create a header (general I2S options) and scan catalog file from multiple I2S input files'
+    parser.add_argument('header_file', help='Path to write the header file to.')
+    parser.add_argument('scan_list_file', help='Path to write the catalog of scans to.')
+    parser.add_argument('i2s_files', nargs='+', help='The I2S input files to merge.')
+    parser.set_defaults(driver_fxn=create_header_and_full_scan_list)
+
+
 def parse_build_cfg_args(parser):
     parser.description = 'Construct the starting config file for running I2S in bulk'
     parser.add_argument('cfg_file', help='The name to give the new config file')
@@ -1880,6 +1888,53 @@ def parse_build_cfg_args(parser):
                              'have their values inserted in the new config file.')
 
     parser.set_defaults(driver_fxn=build_cfg_file)
+
+
+def parse_build_cfg_many_args(parser):
+    parser.description = 'Construct the starting config file for running I2S in parallel from multiple I2S input files'
+    parser.add_argument('site_id', help='The two letter site ID of the site that these I2S input files are for')
+    parser.add_argument('output_dir', help='Path to the directory to output the config file and generated I2S '
+                                           'input files.')
+    parser.add_argument('i2s_input_files', nargs='+', help='The original I2S input files to merge and re-split')
+    parser.add_argument('-s', '--split-by', default='D', choices=('D', 'M', 'Y'),
+                        help='How to split up the I2S runs for parallelization. D = daily, M = monthly, Y = yearly.')
+    grp = parser.add_mutually_exclusive_group()
+    grp.add_argument('--is-slices', action='store_const', const=True, default=None,
+                     help='Indicates that the interferograms are slices. If not specified, then i2srun will '
+                          'try to infer this from the first I2S input file.')
+    grp.add_argument('--is-opus', action='store_const', const=False, dest='is_slices',
+                     help='Indicates that the interferograms are full Opus interferograms. If not specified, then '
+                          'i2srun will try to infer this from the first I2S input file.')
+    parser.epilog = 'This will take 1 or more original I2S input files, extract the scan catalogs from them, and ' \
+                    'create new I2S input files organized by day/month/year and a base config file to control ' \
+                    'running them in parallel. The general I2S options (everything before the scan catalog) are ' \
+                    'taken from the first input file.'
+
+    parser.set_defaults(driver_fxn=build_cfg_from_many_inputs)
+
+
+def parse_build_cfg_header_catalog_args(parser):
+    parser.description = 'Build an i2srun config file from a header and catalog file'
+    parser.add_argument('site_id', help='The two letter site ID of the site that these I2S input files are for')
+    parser.add_argument('output_dir', help='Path to the directory to output the config file and generated I2S '
+                                           'input files.')
+    parser.add_argument('header_file', help='The path to the header file with the general I2S options (before the '
+                                            'scan catalog).')
+    parser.add_argument('scan_list', help='The path to the scan catalog file.')
+    parser.add_argument('-s', '--split-by', default='D', choices=('D', 'M', 'Y'),
+                        help='How to split up the I2S runs for parallelization. D = daily, M = monthly, Y = yearly.')
+    grp = parser.add_mutually_exclusive_group()
+    grp.add_argument('--is-slices', action='store_const', const=True, default=None,
+                     help='Indicates that the interferograms are slices. If not specified, then i2srun will '
+                          'try to infer this from the first I2S input file.')
+    grp.add_argument('--is-opus', action='store_const', const=False, dest='is_slices',
+                     help='Indicates that the interferograms are full Opus interferograms. If not specified, then '
+                          'i2srun will try to infer this from the first I2S input file.')
+    parser.epilog = 'This will take a file that has the general I2S options and combine it with a second that has ' \
+                    'a list (a.k.a. catalog) of all the scans to process and create I2S input files split up by ' \
+                    'day/month/year for parallelization and a config file to control how i2srun sets them up.'
+
+    parser.set_defaults(driver_fxn=build_cfg_from_header_scan_list)
 
 
 def parse_update_cfg_args(parser):
@@ -2032,8 +2087,20 @@ def parser_plot_rough_spec(parser):
 def parse_i2s_args(parser):
     subp = parser.add_subparsers()
 
+    create_head_cat = subp.add_parser('header-catalog', aliases=['hc'],
+                                      help='Build a header and catalog file from many I2S input files')
+    parse_header_catalog_args(create_head_cat)
+
     build_cfg = subp.add_parser('build-cfg', help='Build the config file to run I2S in bulk.')
     parse_build_cfg_args(build_cfg)
+
+    build_cfg_many = subp.add_parser('build-cfg-many', aliases=['bcm'],
+                                     help='Build the config file from multiple original I2S input files.')
+    parse_build_cfg_many_args(build_cfg_many)
+
+    build_cfg_head_cat = subp.add_parser('build-cfg-hc', aliases=['bchc'],
+                                         help='Build the config file from header and catalog files')
+    parse_build_cfg_header_catalog_args(build_cfg_head_cat)
 
     update_cfg = subp.add_parser('up-cfg', help='Update the config file with new run files.')
     parse_update_cfg_args(update_cfg)
