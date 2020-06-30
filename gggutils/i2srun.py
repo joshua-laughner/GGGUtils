@@ -2060,6 +2060,13 @@ def parse_check_i2s_link_args(parser):
     parser.set_defaults(driver_fxn=check_i2s_links)
 
 
+def parse_i2s_par_file_args(parser):
+    parser.description = 'Create a file that can be used with GNU parallel to run I2S in parallel'
+    parser.add_argument('cfg_file', help='Path to the i2srun config file to base the parallel file on.')
+    parser.add_argument('run_file', help='Path to write the parallel run file to')
+    parser.set_defaults(driver_fxn=create_i2s_parallel_run_file)
+
+
 def parse_run_i2s_args(parser):
     parser.description = 'Run I2S in bulk for all target interferograms specified in a config file'
     parser.add_argument('cfg_file', help='The configuration file to use to drive the execution of I2S')
@@ -2125,6 +2132,9 @@ def parse_i2s_args(parser):
 
     check_links = subp.add_parser('chk-links', help='Check the linked I2S input files')
     parse_check_i2s_link_args(check_links)
+
+    make_par_file = subp.add_parser('par', help='Create run file for GNU parallel')
+    parse_i2s_par_file_args(make_par_file)
 
     run_i2s = subp.add_parser('run', help='Run I2S in batch')
     parse_run_i2s_args(run_i2s)
