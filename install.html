@@ -1,0 +1,257 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Installation &mdash; GGGUtils 0.2.0 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script type="text/javascript" src="_static/jquery.js"></script>
+        <script type="text/javascript" src="_static/underscore.js"></script>
+        <script type="text/javascript" src="_static/doctools.js"></script>
+        <script type="text/javascript" src="_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="_static/graphviz.css" type="text/css" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="I2SRun - Utilities to run I2S in batch" href="i2srun.html" />
+    <link rel="prev" title="Welcome to GGGUtils’s documentation!" href="index.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home"> GGGUtils
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Installation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#dependencies">Dependencies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#what-is-installed">What is installed</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#is-python-2-supported">Is Python 2 supported?</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="i2srun.html">I2SRun - Utilities to run I2S in batch</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">GGGUtils</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html">Docs</a> &raquo;</li>
+        
+      <li>Installation</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/install.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="installation">
+<h1>Installation<a class="headerlink" href="#installation" title="Permalink to this headline">¶</a></h1>
+<p>GGGUtils can be obtained from Github at <a class="reference external" href="https://github.com/joshua-laughner/GGGUtils">https://github.com/joshua-laughner/GGGUtils</a>.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Option 1 (with git): clone with <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">clone</span> <span class="pre">https://github.com/joshua-laughner/GGGUtils.git</span></code></p></li>
+<li><p>Option 2 (without git): go to the <a class="reference external" href="https://github.com/joshua-laughner/GGGUtils">repo</a>, click on the “Clone”
+button, and choose “Download ZIP”. Once it finishes downloading, unzip and place wherever you wish.</p></li>
+</ul>
+</div></blockquote>
+<p>This follows the standard Python installation, in the top directory, there is a <code class="file docutils literal notranslate"><span class="pre">setup.py</span></code> file. The recommended
+way to install is to execute the command:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">python</span> <span class="n">setup</span><span class="o">.</span><span class="n">py</span> <span class="o">--</span><span class="n">user</span> <span class="n">develop</span>
+</pre></div>
+</div>
+<p>or, if installing into an environment:</p>
+<blockquote>
+<div><p>python setup.py develop</p>
+</div></blockquote>
+<p>in this directory. This is preferred over <code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">setup.py</span> <span class="pre">install</span></code> because it creates an “editable” install where
+changes to this copy are immediately active, without needing to run <code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">setup.py</span> <span class="pre">install</span></code> again.</p>
+<div class="section" id="dependencies">
+<h2>Dependencies<a class="headerlink" href="#dependencies" title="Permalink to this headline">¶</a></h2>
+<p>For <code class="docutils literal notranslate"><span class="pre">i2srun</span></code> (which is the only officially supported part of this package at present) only two non-standard packages
+are required:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><a class="reference external" href="https://configobj.readthedocs.io/en/latest/configobj.html">ConfigObj</a></p></li>
+<li><p><a class="reference external" href="https://pypi.org/project/textui/">TextUI</a></p></li>
+</ul>
+</div></blockquote>
+<p>These are included as dependencies in the <code class="file docutils literal notranslate"><span class="pre">setup.py</span></code> and so should be automatically installed.</p>
+</div>
+<div class="section" id="what-is-installed">
+<h2>What is installed<a class="headerlink" href="#what-is-installed" title="Permalink to this headline">¶</a></h2>
+<p>In addition to the <code class="docutils literal notranslate"><span class="pre">gggutils</span></code> Python package, this installs a command line script, <code class="docutils literal notranslate"><span class="pre">gggutils</span></code> as an entry point
+to the various command line programs. During installation, watch for a line similar to:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Installing</span> <span class="n">gggutils</span> <span class="n">script</span> <span class="n">to</span> <span class="o">/</span><span class="n">home</span><span class="o">/</span><span class="n">josh</span><span class="o">/.</span><span class="n">local</span><span class="o">/</span><span class="nb">bin</span>
+</pre></div>
+</div>
+<p>as this is where that script goes. For it to be accessible globally, ensure that that directory is on your shell’s PATH.
+If you install it in a virtual environment or Conda environment, activating that environment will modify your PATH
+automatically.</p>
+</div>
+<div class="section" id="is-python-2-supported">
+<h2>Is Python 2 supported?<a class="headerlink" href="#is-python-2-supported" title="Permalink to this headline">¶</a></h2>
+<p>Nope. <a class="reference external" href="https://www.python.org/doc/sunset-python-2/">Python 2 has reached end of life</a>. It’s time to upgrade. (If you
+really can’t upgrade, I recommend creating a Python 3 conda environment.)</p>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="i2srun.html" class="btn btn-neutral float-right" title="I2SRun - Utilities to run I2S in batch" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="index.html" class="btn btn-neutral float-left" title="Welcome to GGGUtils’s documentation!" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, Joshua Laughner
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>
