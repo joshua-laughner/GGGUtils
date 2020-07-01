@@ -36,7 +36,7 @@
   <link rel="stylesheet" href="_static/graphviz.css" type="text/css" />
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="prev" title="Welcome to GGGUtils’s documentation!" href="index.html" /> 
+    <link rel="prev" title="Installation" href="install.html" /> 
 </head>
 
 <body class="wy-body-for-nav">
@@ -82,13 +82,22 @@
             
               <p class="caption"><span class="caption-text">Contents:</span></p>
 <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">I2SRun - Utilities to run I2S in batch</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#config-file">Config file</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#run-section">Run section</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#i2s-section">I2S section</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#sites-section">Sites section</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#step-1-create-header-and-catalog-files">Step 1 - Create header and catalog files</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#step-2-create-parallel-i2s-input-files-and-the-i2srun-config-file">Step 2 - Create parallel I2S input files and the i2srun config file</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#step-3-modify-the-config-file-as-necessary-for-your-site">Step 3 - Modify the config file as necessary for your site</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#config-file-details">Config file details</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#run-section">Run section</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#i2s-section">I2S section</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#sites-section">Sites section</a></li>
 </ul>
 </li>
+<li class="toctree-l3"><a class="reference internal" href="#running-multiple-sites">Running multiple sites</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#step-4-create-the-run-directories">Step 4 - Create the run directories</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#step-5-run-using-gnu-parallel">Step 5 - Run using GNU Parallel</a></li>
 </ul>
 </li>
 </ul>
@@ -157,9 +166,105 @@
             
   <div class="section" id="i2srun-utilities-to-run-i2s-in-batch">
 <h1>I2SRun - Utilities to run I2S in batch<a class="headerlink" href="#i2srun-utilities-to-run-i2s-in-batch" title="Permalink to this headline">¶</a></h1>
-<div class="section" id="config-file">
-<h2>Config file<a class="headerlink" href="#config-file" title="Permalink to this headline">¶</a></h2>
-<p>Here is an example config file:</p>
+<p><code class="docutils literal notranslate"><span class="pre">i2srun</span></code> is a collection of utilities that make it easier to run I2S in batch. The standard approach is to use it to
+set up a collection of run directories along with a shell file that can be passed to GNU parallel to run I2S in each
+directory in parallel. Specifically the steps are:</p>
+<blockquote>
+<div><ol class="arabic simple">
+<li><p>(optional) Create a header file (with all the common I2S options for your site) and a catalog file (with the list
+of scans for your site).</p></li>
+<li><p>Create separate I2S input files for each day, month, or year, and a config file that tells <code class="docutils literal notranslate"><span class="pre">i2srun</span></code> where to
+find your interferograms, which flimit file to use, etc.</p></li>
+<li><p>Modify the config file with the necessary settings for your site.</p></li>
+<li><p>Create the run directories, one per day, month, or year that you wish to run in parallel.</p></li>
+<li><p>Run multiple I2S instances with GNU Parallel.</p></li>
+</ol>
+</div></blockquote>
+<p>Alternately, if you do not have GNU Parallel installed, <code class="docutils literal notranslate"><span class="pre">i2srun</span></code> has a mechanism to run I2S in parallel itself
+(replacing step 5) but using GNU Parallel is preferred.</p>
+<p>Note that for steps 1 and 2 you must work on one site at a time. Once you have the config and input files from step 2,
+then you can combine the config files from multiple sites from step 3 on to allow parallelization over multiple sites.</p>
+<p>Now we will go through each step in more detail.</p>
+<div class="section" id="step-1-create-header-and-catalog-files">
+<h2>Step 1 - Create header and catalog files<a class="headerlink" href="#step-1-create-header-and-catalog-files" title="Permalink to this headline">¶</a></h2>
+<p>This can either be done manually or with the <code class="docutils literal notranslate"><span class="pre">i2srun</span></code> subcommand <code class="docutils literal notranslate"><span class="pre">header-catalog</span></code>, or <code class="docutils literal notranslate"><span class="pre">hc</span></code> for short. The goal is
+to produce two files: the header, which includes all the common I2S options shown
+<a class="reference external" href="https://tccon-wiki.caltech.edu/Software/GGG/Download/GGG_2020_Release_Notes/I2S_2020_Release_Notes#Common_I2S_input_parameters">on the TCCON wiki</a>,
+and the catalog of scans to process. For sites that record slices, this will be a list of year, month, day, run, and
+starting slice values. For Opus interferograms, this will be the list of interferogram files plus the ancillary data
+needed.</p>
+<p>Both of these files can be created manually, or with existing tools. Alternatively, if you have many preexisting I2S
+input files that you wish to generate the header and catalog from, <code class="docutils literal notranslate"><span class="pre">i2srun</span></code> provides a utility to do so,
+<code class="docutils literal notranslate"><span class="pre">header-catalog</span></code>. The command:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">gggutils</span> <span class="n">i2s</span> <span class="n">header</span><span class="o">-</span><span class="n">catalog</span> <span class="n">xx_i2s_header</span><span class="o">.</span><span class="ow">in</span> <span class="n">xx_i2s_catalog</span><span class="o">.</span><span class="ow">in</span> <span class="o">*.</span><span class="n">i2s</span><span class="o">.</span><span class="ow">in</span>
+</pre></div>
+</div>
+<p>would read all the I2S input files matching the pattern <code class="docutils literal notranslate"><span class="pre">*.i2s.in</span></code> and write the header to <code class="docutils literal notranslate"><span class="pre">xx_i2s_header.in</span></code> and
+the catalog to <code class="docutils literal notranslate"><span class="pre">xx_i2s_catalog.in</span></code>.</p>
+<p>Note that this step is not necessary, depending on how you generate the config file, but you may find it useful, but it
+is the most convenience way to have a single place to modify your general I2S options.</p>
+</div>
+<div class="section" id="step-2-create-parallel-i2s-input-files-and-the-i2srun-config-file">
+<h2>Step 2 - Create parallel I2S input files and the i2srun config file<a class="headerlink" href="#step-2-create-parallel-i2s-input-files-and-the-i2srun-config-file" title="Permalink to this headline">¶</a></h2>
+<p>The next step is to create a configuration file that <code class="docutils literal notranslate"><span class="pre">i2srun</span></code> can use to figure out how to parallelize your I2S runs
+and the individual I2S input files for running in parallel. This can be done in two ways: either using a header +
+catalog file pair or an existing collection of I2S input files. An example of the first method is:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">gggutils</span> <span class="n">i2s</span> <span class="n">build</span><span class="o">-</span><span class="n">cfg</span><span class="o">-</span><span class="n">hc</span> <span class="n">xx</span> <span class="o">./</span><span class="n">i2srun</span><span class="o">-</span><span class="n">config</span> <span class="n">xx_i2s_header</span><span class="o">.</span><span class="ow">in</span> <span class="n">xx_i2s_catalog</span><span class="o">.</span><span class="ow">in</span>
+</pre></div>
+</div>
+<p>This will create the configuration and parallel input files for site “xx” in the <code class="file docutils literal notranslate"><span class="pre">i2srun-config</span></code> directory, using
+<code class="file docutils literal notranslate"><span class="pre">xx_i2s_header.in</span></code> to set the general I2S options for all the parallel input files and <code class="file docutils literal notranslate"><span class="pre">xx_i2s_catalog.in</span></code>
+to figure out which interferograms exist to be processed.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The “xx” in the header and catalog file names need not correspond to the “xx” used for the site ID. Your header
+and catalog files may be named anything.</p>
+</div>
+<p>An example of the second method is:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">gggutils</span> <span class="n">i2s</span> <span class="n">build</span><span class="o">-</span><span class="n">cfg</span><span class="o">-</span><span class="n">many</span> <span class="n">xx</span> <span class="o">./</span><span class="n">i2srun</span><span class="o">-</span><span class="n">config</span> <span class="o">*.</span><span class="n">i2s</span><span class="o">.</span><span class="ow">in</span>
+</pre></div>
+</div>
+<p>This will automatically extract a catalog of interferograms from all the input files passed (those matching <code class="docutils literal notranslate"><span class="pre">*.i2s.in</span></code>)
+and take the header from the first of those files. Exactly like the first method, a config file and individual I2S
+input files will be placed in the directory <code class="file docutils literal notranslate"><span class="pre">i2srun-config</span></code>.</p>
+<p>Both of these methods have the <code class="docutils literal notranslate"><span class="pre">--split-by</span></code> option, which controls how finely divided the interferograms should be
+for parallel processing. The default is to split them up so that each day will be run separately, but they can also be
+grouped by month or year by setting the value of <code class="docutils literal notranslate"><span class="pre">--split-by</span></code> to <code class="docutils literal notranslate"><span class="pre">M</span></code> or <code class="docutils literal notranslate"><span class="pre">Y</span></code>, respectively.</p>
+</div>
+<div class="section" id="step-3-modify-the-config-file-as-necessary-for-your-site">
+<h2>Step 3 - Modify the config file as necessary for your site<a class="headerlink" href="#step-3-modify-the-config-file-as-necessary-for-your-site" title="Permalink to this headline">¶</a></h2>
+<p>The third step is to modify the configuration file so that <code class="docutils literal notranslate"><span class="pre">i2srun</span></code> knows how to set up the separate, parallel I2S
+runs. Details of the configuration file follow, but generally the minimum you need to do is:</p>
+<blockquote>
+<div><ol class="arabic simple">
+<li><p>Set <code class="docutils literal notranslate"><span class="pre">run_top_dir</span></code> in the <code class="docutils literal notranslate"><span class="pre">[Run]</span></code> section to the location where you want your I2S runs to happen.</p></li>
+<li><dl class="simple">
+<dt>For each site in the <code class="docutils literal notranslate"><span class="pre">[Sites]</span></code> section, set:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">slices</span></code>: whether it uses slices or not</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">site_root_dir</span></code>: the path to the directory where your slice date folders (i.e. the <code class="file docutils literal notranslate"><span class="pre">YYMMDD.R</span></code> folders)
+or your interferograms are.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">flimit_file</span></code>: path to the flimit file to use for this site.</p></li>
+<li><p>Set <code class="docutils literal notranslate"><span class="pre">no_date_dir</span></code> to <code class="docutils literal notranslate"><span class="pre">True</span></code> or <code class="docutils literal notranslate"><span class="pre">1</span></code></p></li>
+<li><p>Set <code class="docutils literal notranslate"><span class="pre">subdir</span></code> to <code class="docutils literal notranslate"><span class="pre">.</span></code></p></li>
+<li><p>Set <code class="docutils literal notranslate"><span class="pre">slices_in_subdir</span></code> to <code class="docutils literal notranslate"><span class="pre">False</span></code> or <code class="docutils literal notranslate"><span class="pre">0</span></code></p></li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><p>The <code class="docutils literal notranslate"><span class="pre">i2s_input_file</span></code> values for each year/month/day should be fine as their defaults, unless you move the
+config or generated I2S input files.</p></li>
+</ol>
+</div></blockquote>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The four options that take paths (<code class="docutils literal notranslate"><span class="pre">run_top_dir</span></code>, <code class="docutils literal notranslate"><span class="pre">site_root_dir</span></code>, <code class="docutils literal notranslate"><span class="pre">flimit_file</span></code>, and <code class="docutils literal notranslate"><span class="pre">i2s_input_file</span></code>)
+interpret relative paths as <em>relative to the config file</em>. That is, if the <code class="docutils literal notranslate"><span class="pre">i2s_input_file</span></code> option is
+<code class="file docutils literal notranslate"><span class="pre">./demo.i2s</span></code>, then <code class="docutils literal notranslate"><span class="pre">i2srun</span></code> always looks for it in the same directory as the config file, <em>not</em> the
+directory you execute <code class="docutils literal notranslate"><span class="pre">i2srun</span></code> from.</p>
+</div>
+<div class="section" id="config-file-details">
+<h3>Config file details<a class="headerlink" href="#config-file-details" title="Permalink to this headline">¶</a></h3>
+<p>This section will give the full details of the config file. Here is an example config file:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">Run</span><span class="p">]</span>
 <span class="c1"># The directory where the data are linked to to run I2S/GGG</span>
 <span class="n">run_top_dir</span> <span class="o">=</span> <span class="o">/</span><span class="n">oco2</span><span class="o">-</span><span class="n">data</span><span class="o">/</span><span class="n">tccon</span><span class="o">-</span><span class="n">nobak</span><span class="o">/</span><span class="n">scratch</span><span class="o">/</span><span class="n">beta</span><span class="o">-</span><span class="n">test</span><span class="o">-</span><span class="n">spectra</span><span class="o">/</span><span class="n">rc1</span>
@@ -207,21 +312,27 @@ denoted by names enclosed in <code class="docutils literal notranslate"><span cl
 example, <code class="docutils literal notranslate"><span class="pre">[[pa]]</span></code> is a subsection of <code class="docutils literal notranslate"><span class="pre">[Sites]</span></code> and <code class="docutils literal notranslate"><span class="pre">[[[pa20140918]]]</span></code> a subsection of <code class="docutils literal notranslate"><span class="pre">[[pa]]</span></code>. Comments are
 allowed, both on their own and inline, beginning with a <code class="docutils literal notranslate"><span class="pre">#</span></code>. Details on the options for each section follow.</p>
 <div class="section" id="run-section">
-<h3>Run section<a class="headerlink" href="#run-section" title="Permalink to this headline">¶</a></h3>
+<h4>Run section<a class="headerlink" href="#run-section" title="Permalink to this headline">¶</a></h4>
 <p>This section controls the execution of I2S. Options that it must have are:</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">run_top_dir</span></code> - this is a path to where run directories for I2S can be created.</p></li>
 </ul>
 </div>
 <div class="section" id="i2s-section">
-<h3>I2S section<a class="headerlink" href="#i2s-section" title="Permalink to this headline">¶</a></h3>
+<h4>I2S section<a class="headerlink" href="#i2s-section" title="Permalink to this headline">¶</a></h4>
 <p>This section allows you to set options in the I2S input file. For each line, the key must be the parameter number
 and the value the value it should take. In the above example, the line <code class="docutils literal notranslate"><span class="pre">3</span> <span class="pre">=</span> <span class="pre">0</span></code> sets Parameter #3 (whether to save
 separated interferograms) to 0 for all I2S run files it creates in the run directories. If a parameter needs to be
 on two lines (like Parameter #17) indicate the line break with a <code class="docutils literal notranslate"><span class="pre">\n</span></code>.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This section should be left blank in normal usage. Generally it is more straightforward (and safer) to make the
+change in your header file for Step 2. This section is retained in <code class="docutils literal notranslate"><span class="pre">i2srun</span></code> only to simplify bulk testing of
+different I2S parameters on e.g. the OCO-2/3 target data.</p>
+</div>
 </div>
 <div class="section" id="sites-section">
-<h3>Sites section<a class="headerlink" href="#sites-section" title="Permalink to this headline">¶</a></h3>
+<h4>Sites section<a class="headerlink" href="#sites-section" title="Permalink to this headline">¶</a></h4>
 <p>This section controls which sites and days are to be run and how to run them. It is organized into subsections by site
 ID, and sub-subsections by site ID + date in YYYYMMDD format. Each date to run must have the options listed below;
 however, it is set up so that if an option is not present in the date sub-subsection, it is read from the site
@@ -273,7 +384,49 @@ the case where <code class="docutils literal notranslate"><span class="pre">slic
 <li><p>Then, if <code class="docutils literal notranslate"><span class="pre">slices_in_subdir</span></code> is <code class="docutils literal notranslate"><span class="pre">False</span></code>, the slices are assumed to be in <code class="docutils literal notranslate"><span class="pre">$DATADIR/YYMMDD.R/scan</span></code>.</p></li>
 <li><p>If <code class="docutils literal notranslate"><span class="pre">slices_in_subdir</span></code> is <code class="docutils literal notranslate"><span class="pre">True</span></code>, then the slices are assumed to be in <code class="docutils literal notranslate"><span class="pre">$DATADIR</span></code> directly.</p></li>
 </ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>In the current version, the sub-subsection names are expected to consist of the two letter site ID followed by
+between 4 and 8 digits giving the year, year &amp; month, or year-month-day. At this time, no other format is permitted.</p>
 </div>
+</div>
+</div>
+<div class="section" id="running-multiple-sites">
+<h3>Running multiple sites<a class="headerlink" href="#running-multiple-sites" title="Permalink to this headline">¶</a></h3>
+<p>To run multiple sites in parallel, you must first do Step 1 and 2 separately for each site. Then take the separate
+config files produced and copy the site subsections into a single config file. In the above example, note how the
+<code class="docutils literal notranslate"><span class="pre">[Sites]</span></code> section has two subsections: <code class="docutils literal notranslate"><span class="pre">[[pa]]</span></code> and <code class="docutils literal notranslate"><span class="pre">[[wg]]</span></code>. To get this, you would do steps 1 and 2 for
+Park Falls and Wollongong separately, then e.g. copy the <code class="docutils literal notranslate"><span class="pre">[[wg]]</span></code> subsection into the Park Falls config file.</p>
+</div>
+</div>
+<div class="section" id="step-4-create-the-run-directories">
+<h2>Step 4 - Create the run directories<a class="headerlink" href="#step-4-create-the-run-directories" title="Permalink to this headline">¶</a></h2>
+<p>To set up the run directories, use a command like:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">gggutils</span> <span class="n">i2s</span> <span class="n">link</span><span class="o">-</span><span class="n">inp</span> <span class="o">./</span><span class="n">i2srun</span><span class="o">-</span><span class="n">config</span><span class="o">/</span><span class="n">i2s_parallel</span><span class="o">.</span><span class="n">cfg</span>
+</pre></div>
+</div>
+<p>This will take the given config file and create the run directories under the location specified by <code class="docutils literal notranslate"><span class="pre">run_top_dir</span></code>.
+They will be organized by site ID, then year, month, or day (depending on how split up they were in the config file).</p>
+<p>Each run directory will have:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>the flimit file <em>linked</em> to this directory</p></li>
+<li><p>the I2S input file (as <code class="file docutils literal notranslate"><span class="pre">slice-i2s.in</span></code> or <code class="file docutils literal notranslate"><span class="pre">opus-i2s.in</span></code>). This will be a copy with the source, output,
+and flimit options changes to match the run directory structure.</p></li>
+<li><p>a directory <code class="file docutils literal notranslate"><span class="pre">slices</span></code> or <code class="file docutils literal notranslate"><span class="pre">igms</span></code> with the slice date directories or interferograms linked</p></li>
+<li><p>an empty directory, <code class="file docutils literal notranslate"><span class="pre">spectra</span></code> for the spectra to be generated in.</p></li>
+</ul>
+</div></blockquote>
+<p>In the top run directory, there will also be created, by default, a file <code class="file docutils literal notranslate"><span class="pre">multii2s.sh</span></code> file. Analagously to
+the <code class="file docutils literal notranslate"><span class="pre">multiggg.sh</span></code> file, this can be used with GNU parallel to run each day/month/year simultaneously.</p>
+</div>
+<div class="section" id="step-5-run-using-gnu-parallel">
+<h2>Step 5 - Run using GNU Parallel<a class="headerlink" href="#step-5-run-using-gnu-parallel" title="Permalink to this headline">¶</a></h2>
+<p>Navigate to your top run directory, and find the <code class="file docutils literal notranslate"><span class="pre">multii2s.sh</span></code> file. This can be run using GNU parallel with:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">parallel</span> <span class="o">-</span><span class="n">t</span> <span class="o">--</span><span class="n">delay</span><span class="o">=</span><span class="mi">1</span> <span class="o">-</span><span class="n">jN</span> <span class="o">&lt;</span> <span class="n">multii2s</span><span class="o">.</span><span class="n">sh</span>
+</pre></div>
+</div>
+<p>replacing <em>N</em> with the number of processors you wish to use.</p>
 </div>
 </div>
 
@@ -286,7 +439,7 @@ the case where <code class="docutils literal notranslate"><span class="pre">slic
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
       
-        <a href="index.html" class="btn btn-neutral float-left" title="Welcome to GGGUtils’s documentation!" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+        <a href="install.html" class="btn btn-neutral float-left" title="Installation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
       
     </div>
   

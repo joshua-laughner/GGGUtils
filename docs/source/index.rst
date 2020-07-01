@@ -10,6 +10,7 @@ Welcome to GGGUtils's documentation!
    :maxdepth: 2
    :caption: Contents:
 
+   install.rst
    i2srun.rst
 
 
