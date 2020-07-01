@@ -1030,7 +1030,8 @@ def _iter_slice_runs(slice_dir, start_date, end_date, start_run, end_run, scanty
         curr_date += dt.timedelta(days=1)
 
 
-def link_i2s_input_files(cfg_file, overwrite=False, clean_links=False, clean_spectra=False, ignore_missing_igms=False):
+def link_i2s_input_files(cfg_file, overwrite=False, clean_links=False, clean_spectra=False, ignore_missing_igms=False,
+                         create_runscript=True):
     """
     Link all the input interferograms/slices and the required input files for I2S into the batch run directory
 
@@ -1077,6 +1078,11 @@ def link_i2s_input_files(cfg_file, overwrite=False, clean_links=False, clean_spe
                 logger.debug('Linking slices for {}'.format(datesect))
                 _link_slices(cfg=cfg, site=sect, datestr=datesect, i2s_opts=cfg['I2S'], overwrite=overwrite,
                              clean_links=clean_links, clean_spectra=clean_spectra)
+
+
+    if create_runscript:
+        run_file = os.path.join(cfg['Run']['run_top_dir'], 'multii2s.sh')
+        create_i2s_parallel_run_file(cfg_file, run_file)
 
 
 def _link_igms(cfg, site, datestr, i2s_opts, overwrite, clean_links, clean_spectra, ignore_missing):
@@ -1581,12 +1587,12 @@ def create_i2s_parallel_run_file(cfg_file, run_file, abspaths=False):
             for datestr in site_cfg.sections:
                 this_run_dir = date_subdir(cfg, site, datestr)
                 if abspaths:
-                    this_run_dir = os.path.abspath(this_run_dir)
+                    par_run_dir = os.path.abspath(this_run_dir)
                 else:
-                    this_run_dir = os.path.relpath(this_run_dir, run_file_dir)
+                    par_run_dir = os.path.relpath(this_run_dir, run_file_dir)
                 input_file = _find_input_file(this_run_dir)
                 wobj.write('cd {rundir} && {i2s} {infile} > i2s.log\n'.format(
-                    rundir=this_run_dir, i2s=i2s_cmd, infile=input_file
+                    rundir=par_run_dir, i2s=i2s_cmd, infile=input_file
                 ))
 
 

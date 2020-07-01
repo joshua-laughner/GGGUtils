@@ -415,7 +415,7 @@ def load_config_file(cfg_file):
     # paths that, if relative, should be interpreted as relative to the config file. We exclude "subdir" here because
     # it's relative to the source date directory
     cfg_file_dir = os.path.abspath(os.path.dirname(cfg_file))
-    path_keys = ('site_root_dir', 'flimit_file', 'i2s_input_file')
+    path_keys = ('run_top_dir', 'site_root_dir', 'flimit_file', 'i2s_input_file')
 
     def make_paths_abs(section, key):
         if key in path_keys and not os.path.isabs(section[key]):
