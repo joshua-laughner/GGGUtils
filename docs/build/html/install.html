@@ -86,7 +86,10 @@
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Installation</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#dependencies">Dependencies</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#what-is-installed">What is installed</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#is-python-2-supported">Is Python 2 supported?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#is-python-2-supported">Is Python 2 supported?</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#creating-a-python-3-environment">Creating a Python 3 environment</a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="i2srun.html">I2SRun - Utilities to run I2S in batch</a></li>
@@ -202,6 +205,53 @@ automatically.</p>
 <h2>Is Python 2 supported?<a class="headerlink" href="#is-python-2-supported" title="Permalink to this headline">¶</a></h2>
 <p>Nope. <a class="reference external" href="https://www.python.org/doc/sunset-python-2/">Python 2 has reached end of life</a>. It’s time to upgrade. (If you
 really can’t upgrade, I recommend creating a Python 3 conda environment.)</p>
+<p>To test if you have Python 3 installed, run the following in the terminal:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">python</span> <span class="o">-</span><span class="n">V</span>
+</pre></div>
+</div>
+<p>If the output is something like <code class="docutils literal notranslate"><span class="pre">Python</span> <span class="pre">3.8.3</span></code> (as long as the first number is a 3), you’re all set. If instead it is
+<code class="docutils literal notranslate"><span class="pre">Python</span> <span class="pre">2.7.12</span></code> or similar (the first number is a 2), your default python is Python 2. You can try:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">python3</span> <span class="o">-</span><span class="n">V</span>
+</pre></div>
+</div>
+<p>(note the “3” in the command). If this returns <code class="docutils literal notranslate"><span class="pre">Python</span> <span class="pre">3.x.x</span></code> then you can proceed by substituting <code class="docutils literal notranslate"><span class="pre">python3</span></code> for
+<code class="docutils literal notranslate"><span class="pre">python</span></code> in the install commands. If it returns <code class="docutils literal notranslate"><span class="pre">Command</span> <span class="pre">not</span> <span class="pre">found</span></code>, then you will need to upgrade or create a
+Python 3 environment.</p>
+<div class="section" id="creating-a-python-3-environment">
+<h3>Creating a Python 3 environment<a class="headerlink" href="#creating-a-python-3-environment" title="Permalink to this headline">¶</a></h3>
+<p>This assumes you have Anaconda Python installed, specifically the <code class="docutils literal notranslate"><span class="pre">conda</span></code> package manager. You can verify this with:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">conda</span> <span class="o">-</span><span class="n">V</span>
+</pre></div>
+</div>
+<p>If this returns <code class="docutils literal notranslate"><span class="pre">Command</span> <span class="pre">not</span> <span class="pre">found</span></code>, you will need to <a class="reference external" href="https://www.anaconda.com/products/individual">install Anaconda</a>.
+Currently, both Python 2 and Python 3 Anaconda distributions are available; you may install a Python 2 Anaconda to keep
+Python 2 as your default; it will still be able to create Python 3 environments.</p>
+<p>To create a new Python 3 environment, run:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">conda</span> <span class="n">create</span> <span class="o">-</span><span class="n">n</span> <span class="n">gggutils</span> <span class="n">python</span><span class="o">=</span><span class="mi">3</span>
+</pre></div>
+</div>
+<p>The value “gggutils” after the <code class="docutils literal notranslate"><span class="pre">-n</span></code> may be whatever name you wish to use for this environment; I used “gggutils” here
+since that is the package we created this environment for.</p>
+<p>You will then need to activate this environment before installing GGGUtils. To do so, the command is:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">conda</span> <span class="n">activate</span> <span class="n">gggutils</span>
+</pre></div>
+</div>
+<p>If you named the environment something other than “gggutils”, use that as the last word instead. Then install GGGUtils
+with the “installing in an environment” command in the first section.</p>
+<p>To use GGGUtils once it is installed in this environment, you have two options:</p>
+<blockquote>
+<div><ol class="arabic simple">
+<li><p>Remember to activate this environment before calling the <code class="docutils literal notranslate"><span class="pre">gggutils</span></code> command line program.</p></li>
+<li><p>Move the <code class="docutils literal notranslate"><span class="pre">gggutils</span></code> script created by the installation into a directory already on your PATH. If you already
+have a directory for command line scripts accessible from anywhere, that is a good place for it. Do not add the
+directory where it is installed to your PATH; that directory contains all command line programs for the “gggutils”
+environment, and so adding it to your PATH may cause you to use other programs from that environment (including
+python itself) even when the environment isn’t activated.</p></li>
+</ol>
+</div></blockquote>
+<p>You can deactivate this environment to return to using your default Python with the command <code class="docutils literal notranslate"><span class="pre">conda</span> <span class="pre">deactivate</span></code> or by
+simply logging into a new shell.</p>
+</div>
 </div>
 </div>
 

@@ -49,3 +49,54 @@ Is Python 2 supported?
 
 Nope. `Python 2 has reached end of life <https://www.python.org/doc/sunset-python-2/>`_. It's time to upgrade. (If you
 really can't upgrade, I recommend creating a Python 3 conda environment.)
+
+To test if you have Python 3 installed, run the following in the terminal::
+
+    python -V
+
+If the output is something like ``Python 3.8.3`` (as long as the first number is a 3), you're all set. If instead it is
+``Python 2.7.12`` or similar (the first number is a 2), your default python is Python 2. You can try::
+
+    python3 -V
+
+(note the "3" in the command). If this returns ``Python 3.x.x`` then you can proceed by substituting ``python3`` for
+``python`` in the install commands. If it returns ``Command not found``, then you will need to upgrade or create a
+Python 3 environment.
+
+
+Creating a Python 3 environment
+*******************************
+
+This assumes you have Anaconda Python installed, specifically the ``conda`` package manager. You can verify this with::
+
+    conda -V
+
+If this returns ``Command not found``, you will need to `install Anaconda <https://www.anaconda.com/products/individual>`_.
+Currently, both Python 2 and Python 3 Anaconda distributions are available; you may install a Python 2 Anaconda to keep
+Python 2 as your default; it will still be able to create Python 3 environments.
+
+To create a new Python 3 environment, run::
+
+    conda create -n gggutils python=3
+
+The value "gggutils" after the ``-n`` may be whatever name you wish to use for this environment; I used "gggutils" here
+since that is the package we created this environment for.
+
+You will then need to activate this environment before installing GGGUtils. To do so, the command is::
+
+    conda activate gggutils
+
+If you named the environment something other than "gggutils", use that as the last word instead. Then install GGGUtils
+with the "installing in an environment" command in the first section.
+
+To use GGGUtils once it is installed in this environment, you have two options:
+
+    1. Remember to activate this environment before calling the ``gggutils`` command line program.
+    2. Move the ``gggutils`` script created by the installation into a directory already on your PATH. If you already
+       have a directory for command line scripts accessible from anywhere, that is a good place for it. Do not add the
+       directory where it is installed to your PATH; that directory contains all command line programs for the "gggutils"
+       environment, and so adding it to your PATH may cause you to use other programs from that environment (including
+       python itself) even when the environment isn't activated.
+
+You can deactivate this environment to return to using your default Python with the command ``conda deactivate`` or by
+simply logging into a new shell.
