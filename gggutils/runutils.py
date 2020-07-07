@@ -5,6 +5,7 @@ import ntpath
 import os
 import re
 import shutil
+import sys
 import tempfile
 
 from configobj import ConfigObj, flatten_errors
@@ -15,6 +16,89 @@ from . import exceptions, _etc_dir
 
 _default_last_header_param = 28
 logger = getLogger('runutils')
+
+
+class ProgressBar(object):
+    """
+    Create a text-based progress bar
+
+    An instance of this class can be used to print a text progress bar that does not need a new line for each progress
+    step. It uses carriage returns to reset to the beginning of each line before printing the next. This therefore
+    does not work well if other print statements occur in between calls to :meth:`print_bar`, the progress bar will
+    either end up on a new line anyway or potentially overwrite previous print statements if they did not end with a
+    newline.
+
+    :param num_symbols: how many steps there should be in the progress bar. In other words, the progress bar will be
+     complete when :meth:`print_bar` is called with ``num_symbols-1``.
+    :type num_symbols: int
+
+    :param prefix: a string to include before the beginning of each progress bar. The class will ensure that at least
+     one space is present between the prefix and the progress bar, but will not add one if one is already present at
+     the end of the prefix.
+    :type prefix: str
+
+    :param suffix: a string to include at the end of each progress bar. The class will ensure that at least one space
+     is present between the progress bar and the suffix, but will not add one if one is already present at the beginning
+     of the suffix.
+    :type suffix: str
+
+    :param add_one: if ``True``, the number of symbols printed in the progress bar is equal to ``i+1`` where ``i`` is
+     the argument to :meth:`print_bar`. This works well with Python loops over ``i in range(n)``, since the last value
+     of ``i`` will be ``n-1``, setting ``add_one`` to ``True`` ensures that a full progress bar is printed at the end.
+    :type add_one: bool
+
+    :param style: can be either '*' or 'counter'. The former prints a symbolic progress bar of the form:
+
+        [*   ]
+        [**  ]
+        [*** ]
+        [****]
+
+     where the number of *'s is set by ``num_symbols``. The latter will instead print 'i/num_symbols' for each step.
+    :type style: str
+    """
+    def __init__(self, num_symbols, prefix='', suffix='', add_one=True, style='*'):
+        """
+        See class help.
+        """
+        if len(prefix) > 0 and not prefix.endswith(' '):
+            prefix += ' '
+        if len(suffix) > 0 and not suffix.startswith(' '):
+            suffix = ' ' + suffix
+
+        if style == '*':
+            self._fmt_str = '{pre}[{{pstr:<{n}}}]{suf}'.format(pre=prefix, n=num_symbols, suf=suffix)
+        elif style == 'counter':
+            self._fmt_str = '{pre}{{i:>{l}}}/{n}{suf}'.format(pre=prefix, n=num_symbols, suf=suffix, l=len(str(num_symbols)))
+        else:
+            raise ValueError('style "{}" not recognized'.format(style))
+        self._add_one = add_one
+
+    def print_bar(self, i):
+        """
+        Print the iteration of the progress bar corresponding to step ``i``.
+
+        :param i: defines the progress step, either the number of *'s to print with ``style='*'`` or the counter number
+         with ``style='counter'``.
+        :type i: int
+        :return: None, prints to screen.
+        """
+        if self._add_one:
+            i += 1
+
+        pstr = '*' * i
+        pbar = self._fmt_str.format(pstr=pstr, i=i)
+        sys.stdout.write('\r' + pbar)
+        sys.stdout.flush()
+
+    def finish(self):
+        """
+        Close the progress bar. By default, just prints a newline.
+        :return: None
+        """
+        sys.stdout.write('\n')
+        sys.stdout.flush()
+
 
 
 def finalize_target_dirs(target_dirs, dirs_list=None):
@@ -573,3 +657,26 @@ def change_ggg_file(gggfile, backup=False, aks='no', spts='no'):
     spt_dir = os.path.join(run_dir, 'spt', window)
     if spts != 'gggpath' and not os.path.exists(spt_dir):
         os.makedirs(spt_dir)
+
+
+def get_num_header_lines(filename):
+    """
+    Get the number of header lines in a standard GGG file
+
+    This assumes that the file specified begins with a line with two numbers: the number of header rows and the number
+    of data columns.
+
+    :param filename: the file to read
+    :type filename: str
+
+    :return: the number of header lines
+    :rtype: int
+    """
+    with open(filename, 'r') as fobj:
+        header_info = fobj.readline()
+
+    if ',' in header_info:
+        header = header_info.split(',')
+    else:
+        header = header_info.split()
+    return int(header[0])

@@ -8,9 +8,7 @@ from scipy import stats
 
 from typing import Sequence, Union
 
-from ginput.common_utils import mod_utils
-
-from .runutils import find_by_glob
+from .runutils import find_by_glob, get_num_header_lines, ProgressBar
 from .readers import read_eng_file
 from .exceptions import TimeMatchError
 
@@ -151,7 +149,7 @@ def match_test_to_delivered_data(site_abbrev: str, new_eof_csv_file: str, req_co
     new_inds = []
     new_unmatched = 0
 
-    pbar = mod_utils.ProgressBar(new_df.shape[0], style='counter', prefix='Matching')
+    pbar = ProgressBar(new_df.shape[0], style='counter', prefix='Matching')
     for iline, new_time in enumerate(new_df.index):
         if iline % 10 == 0 or iline == (new_df.shape[0] - 1):
             pbar.print_bar(iline)
@@ -295,7 +293,7 @@ def read_adcf_file(adcf_file: str) -> pd.DataFrame:
     def _make_timestamp(ser):
         return pd.Timestamp(int(ser.year), 1, 1) + pd.Timedelta(days=ser.doy - 1)
 
-    nhead = mod_utils.get_num_header_lines(adcf_file)
+    nhead = get_num_header_lines(adcf_file)
     df = pd.read_csv(adcf_file, header=nhead-1, sep='\s+')
     df['adcf'] = compute_adcf(df, remove_outliers=False)
     return df.set_index(df.apply(_make_timestamp, axis=1))
@@ -444,6 +442,11 @@ def add_fpit_pres(matched_eofs: pd.DataFrame, interp_method: str = 'index', mod_
     :return: two data frames. The first will be ``matched_eofs`` but with the fpit_surfp added as a new column. The
      second will be the individual FPIT surface pressure from the .mod files.
     """
+    try:
+        from ginput.common_utils import mod_utils, readers
+    except ImportError:
+        raise ImportError('Sorry, this function requires that ginput be installed in this environment')
+
     with pd.option_context('mode.chained_assignment', None):
         if mod_dir is None:
             mod_dir = os.path.join(os.path.expandvars('$GGGPATH'), 'models', 'gnd')
@@ -488,7 +491,7 @@ def add_fpit_pres(matched_eofs: pd.DataFrame, interp_method: str = 'index', mod_
             for geos_time in geos_times:
                 mod_file_name = mod_utils.mod_file_name_for_priors(geos_time, site_lat, site_lon)
                 mod_file_name = os.path.join(mod_dir, mod_file_name)
-                mod_data = mod_utils.read_mod_file(mod_file_name)
+                mod_data = readers.read_mod_file(mod_file_name)
                 sub_df.loc[geos_time, 'fpit_surfp'] = mod_data['scalar']['Pressure']
 
                 this_mod_dict = {'site': site, 'year': year, 'day': doy, 'psurf': mod_data['scalar']['Pressure'],

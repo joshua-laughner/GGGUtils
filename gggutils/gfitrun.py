@@ -12,11 +12,8 @@ import subprocess
 import sys
 import time
 
-from ginput.mod_maker import tccon_sites
-from ginput.common_utils import mod_utils
-
 from . import runutils, _etc_dir
-from .runutils import change_ggg_file
+from .runutils import change_ggg_file, get_num_header_lines
 from .exceptions import GGGInputException, GGGMenuError
 
 logger = getLogger('gfitrun')
@@ -35,6 +32,11 @@ def make_automod_input_files(cfg_file, output_path, email, overwrite=True):
 
     :return:
     """
+    try:
+        from ginput.mod_maker import tccon_sites
+    except ImportError:
+        raise ImportError('Sorry, this function requires ginput installed in this environment')
+    
     if not os.path.isdir(output_path):
         raise IOError('output_path ({}) does not exist'.format(output_path))
 
@@ -182,7 +184,7 @@ def _copy_delivered_sunruns(site, cfg):
             logger.warning('Skipping {}: {}'.format(date_str, err))
             continue
 
-        nheader = mod_utils.get_num_header_lines(delivered_sunrun)
+        nheader = get_num_header_lines(delivered_sunrun)
         new_name = date_str + '.gop'
         sunrun_files.append(new_name)
 
@@ -312,7 +314,7 @@ def _concate_runlogs(runlogs, site_id, delete_date_runlogs=False):
     with open(combined_runlog, 'w') as wobj:
         for this_runlog in runlogs:
             this_runlog = os.path.join(runlog_dir, this_runlog)
-            nheader = mod_utils.get_num_header_lines(this_runlog)
+            nheader = get_num_header_lines(this_runlog)
             with open(this_runlog, 'r') as robj:
                 for line_num, line in enumerate(robj):
                     if line_num >= nheader or first_runlog:
