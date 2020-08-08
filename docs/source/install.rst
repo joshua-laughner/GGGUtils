@@ -12,12 +12,32 @@ way to install is to execute the command::
 
     python setup.py --user develop
 
-or, if installing into an environment:
+in this directory.
+
+Alternatively, you may install GGGUtils into a `virtual environment <https://docs.python.org/3/library/venv.html>`_
+or `conda environment <https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html>`_.
+You may want to do this to separate GGGUtils dependencies from your other Python programs, or because you need a Python
+3 installation (see below). If you wish to install into an environment, first make sure you have that environment
+activated (`pip <https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/#activating-a-virtual-environment>`_,
+`conda <https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html#activating-an-environment>`_)
+then run::
 
     python setup.py develop
 
-in this directory. This is preferred over ``python setup.py install`` because it creates an "editable" install where
-changes to this copy are immediately active, without needing to run ``python setup.py install`` again.
+in the directory with the :file:`setup.py` file.
+
+.. note::
+   If you do install into an environment, by default you will only have access to the ``gggutils`` command line program
+   when that environment is active. If you want it to be always available, the simplest method is to link the ``gggutils``
+   executable (you can find it with ``which gggutils`` while the environment is active) into a directory that is always
+   on your shell's ``$PATH``.
+
+These methods are preferred over ``python setup.py install`` because they creates an "editable" install where changes to
+this copy are immediately active, without needing to run ``python setup.py install`` again.
+
+.. warning::
+   Installing in this way means that the GGGUtils directory must not move after installation. If you do move it,
+   you will need to rerun the above command.
 
 
 Dependencies
