@@ -14,6 +14,10 @@ Welcome to GGGUtils's documentation!
    i2srun.rst
 
 
+Please note that at this time only the above documented features of ``i2srun`` are officially supported. If you use
+other modules in the code, you do so with the understanding that they have *not* been thoroughly tested and may break
+or produce erroneous results.
+
 Indices and tables
 ==================
 

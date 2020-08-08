@@ -1,16 +1,61 @@
 I2SRun - Utilities to run I2S in batch
 ======================================
 
-``i2srun`` is a collection of utilities that make it easier to run I2S in batch. The standard approach is to use it to
-set up a collection of run directories along with a shell file that can be passed to GNU parallel to run I2S in each
-directory in parallel. Specifically the steps are:
+``i2srun`` is a collection of utilities that make it easier to run I2S in batch by splitting up one large set of
+interferograms into separate day, month, or year jobs. It is a subcommand of ``gggutils``, so it will always be called as::
+
+    gggutils i2s
+
+from the command line. ``i2srun`` itself has a number of subcommands. To get the full list, pass the ``--help`` flag
+after ``i2s``::
+
+    $ gggutils i2s --help
+    usage: gggutils i2s [-h]
+                        {header-catalog,hc,build-cfg,build-cfg-many,bcm,build-cfg-hc,bchc,up-cfg,mod-runs,make-runs,make-one-run,patch-runfiles,cp-runs,link-inp,chk-links,par,run,halt,plot-spec}
+                        ...
+
+    positional arguments:
+      {header-catalog,hc,build-cfg,build-cfg-many,bcm,build-cfg-hc,bchc,up-cfg,mod-runs,make-runs,make-one-run,patch-runfiles,cp-runs,link-inp,chk-links,par,run,halt,plot-spec}
+        header-catalog (hc)
+                            Build a header and catalog file from many I2S input
+                            files
+        build-cfg           Build the config file to run I2S in bulk.
+        build-cfg-many (bcm)
+                            Build the config file from multiple original I2S input
+                            files.
+        build-cfg-hc (bchc)
+                            Build the config file from header and catalog files
+        up-cfg              Update the config file with new run files.
+        mod-runs            Modify a batch of run files
+        make-runs           Make missing I2S run files
+        make-one-run        Make one I2S run file
+        patch-runfiles      Patch header and slice/igram lists together
+        cp-runs             Copy target I2S run files to a single directory
+        link-inp            Link the input files to run I2S in bulk
+        chk-links           Check the linked I2S input files
+        par                 Create run file for GNU parallel
+        run                 Run I2S in batch
+        halt                Gracefully halt an active batch I2S run
+        plot-spec           Plot rough spectra
+
+    optional arguments:
+      -h, --help            show this help message and exit
+
+The values listed under "positional arguments" are the various subcommands. If a subcommand has a value in parentheses
+following it, e.g. ``header-catalog (hc)``, the value in parentheses is an alias for that subcommand. That is,
+``gggutils i2s header-catalog`` and ``gggutils i2s hc`` both launch the same program. Not all of these subcommands
+are officially supported, only the ones described in the following list are.
+
+The standard approach is to use ``i2srun`` to set up a collection of run directories along with a shell file that can be
+passed to GNU parallel to run I2S in each directory in parallel. Specifically the steps and their associated subcommands
+are:
 
     1. (optional) Create a header file (with all the common I2S options for your site) and a catalog file (with the list
-       of scans for your site).
+       of scans for your site): ``header-catalog``.
     2. Create separate I2S input files for each day, month, or year, and a config file that tells ``i2srun`` where to
-       find your interferograms, which flimit file to use, etc.
+       find your interferograms, which flimit file to use, etc: ``build-cfg-many`` or ``build-cfg-hc``.
     3. Modify the config file with the necessary settings for your site.
-    4. Create the run directories, one per day, month, or year that you wish to run in parallel.
+    4. Create the run directories, one per day, month, or year that you wish to run in parallel: ``link-inp``.
     5. Run multiple I2S instances with GNU Parallel.
 
 Alternately, if you do not have GNU Parallel installed, ``i2srun`` has a mechanism to run I2S in parallel itself
@@ -19,7 +64,69 @@ Alternately, if you do not have GNU Parallel installed, ``i2srun`` has a mechani
 Note that for steps 1 and 2 you must work on one site at a time. Once you have the config and input files from step 2,
 then you can combine the config files from multiple sites from step 3 on to allow parallelization over multiple sites.
 
-Now we will go through each step in more detail.
+First let us define the different files we will be referring to throughout the rest of this page. Then we will go through
+each step in detail.
+
+Files referred to in this page
+------------------------------
+
+The header file
+###############
+
+In this page, the "header" file refers to a file containing all of the general I2S options. Specifically this is the
+monospaced text block shown under the "Common input parameters" section of the
+`I2S page on the TCCON wiki <https://tccon-wiki.caltech.edu/Software/GGG/Download/GGG_2020_Release_Notes/I2S_2020_Release_Notes>`_.
+
+The catalog file
+################
+
+This is a file that contains the list of slices or full OPUS interferograms to process; it is the bottom of a regular
+I2S input file that comes after the common input parameters.
+
+A catalog of slices would look like::
+
+    2014 9 18 1 3292348
+    2014 9 18 1 3292368
+    2014 9 18 1 3292388
+    2014 9 18 1 3292408
+    2014 9 18 1 3292427
+    2014 9 18 1 3292446
+    2014 9 18 1 3292465
+    2014 9 18 1 3292484
+    2014 9 18 1 3292503
+    2014 9 18 1 3292522
+
+where each row contains the year, month, day, run number, and starting slice of a scan.
+
+A catalog of OPUS interferograms would look like::
+
+    lr20181014spmlaX.0001 2018 10 14 001 -45.038 169.684 370 20.1   1.78  0.0  2.5 983.46 83.6 -1.0000 -0.9999  2.20 256.00
+    lr20181014spmlaX.0003 2018 10 14 003 -45.038 169.684 370 20.1   1.78  0.0  2.4 983.50 83.6 -1.0000 -0.9999  2.10 259.00
+    lr20181014spmlaX.0005 2018 10 14 005 -45.038 169.684 370 20.1   1.77  0.0  2.2 983.54 83.6 -1.0000 -0.9999  2.00 262.00
+    lr20181014spmlaX.0007 2018 10 14 007 -45.038 169.684 370 20.1   1.78  0.0  2.1 983.58 83.6 -1.0000 -0.9999  2.00 265.00
+    lr20181014spmlaX.0009 2018 10 14 009 -45.038 169.684 370 20.1   1.78  0.0  3.0 984.13 81.6 -1.0000 -0.9999  1.60 258.00
+    lr20181014spmlaX.0011 2018 10 14 011 -45.038 169.684 370 20.1   1.78  0.0  3.1 984.22 81.5 -1.0000 -0.9999  1.70 254.00
+    lr20181014spmlaX.0013 2018 10 14 013 -45.038 169.684 370 20.1   1.78  0.0  3.3 984.31 81.5 -1.0000 -0.9999  1.70 250.00
+    lr20181014spmlaX.0015 2018 10 14 015 -45.038 169.684 370 20.1   1.78  0.0  3.4 984.39 81.4 -1.0000 -0.9999  1.70 241.00
+    lr20181014spmlaX.0017 2018 10 14 017 -45.038 169.684 370 20.1   1.78  0.0  3.5 984.41 81.3 -1.0000 -0.9999  1.70 214.00
+    lr20181014spmlaX.0019 2018 10 14 019 -45.038 169.684 370 20.1   1.78  0.0  3.7 984.44 81.3 -1.0000 -0.9999  1.70 187.00
+
+with the interferogram name followed by its associated ancillary data.
+
+I2S input files
+###############
+
+I2S input files are files like :file:`opus-i2s.example.in` or :file:`slice-i2s.example.in` in the GGG repo that contain
+both the common input parameters and catalog of interferograms or slices. This page makes a distinction between
+"original" input files, which are input files from past I2S runs and "individual" or "parallel" input files, which are
+the ones created by ``i2srun`` during Step 2 for the individual years, months, or days that it is parallelizing over.
+
+The config file
+###############
+
+This is the :file:`.cfg` file created in Step 2 that tells ``i2srun`` where it should create the run directories,
+which run directories to create, and where to find other required files (mainly the flimit file). The structure of this
+file will be described in Step 3, when you modify this file to your needs.
 
 Step 1 - Create header and catalog files
 ----------------------------------------
@@ -38,10 +145,17 @@ input files that you wish to generate the header and catalog from, ``i2srun`` pr
     gggutils i2s header-catalog xx_i2s_header.in xx_i2s_catalog.in *.i2s.in
 
 would read all the I2S input files matching the pattern ``*.i2s.in`` and write the header to ``xx_i2s_header.in`` and
-the catalog to ``xx_i2s_catalog.in``.
+the catalog to ``xx_i2s_catalog.in``. These last two arguments can be any file name you want to save the respective
+files as.
 
-Note that this step is not necessary, depending on how you generate the config file, but you may find it useful, but it
-is the most convenience way to have a single place to modify your general I2S options.
+.. note::
+   You do not *need* to do this step. There does exist an option to create the separated I2S run files and the config
+   file from existing I2S input files. However, creating the global header file to combine with a catalog file for
+   whatever days you wish to run is probably the easiest way to keep your global I2S options consistent.
+
+   If you do choose to create these files, you may do so however you wish. The ``header-catalog`` subcommand is provided
+   for this purpose, but if you have existing tools to create a catalog (such as the Perl ``catalog_scantype`` script)
+   feel free to use those.
 
 Step 2 - Create parallel I2S input files and the i2srun config file
 -------------------------------------------------------------------
@@ -52,9 +166,11 @@ catalog file pair or an existing collection of I2S input files. An example of th
 
     gggutils i2s build-cfg-hc xx ./i2srun-config xx_i2s_header.in xx_i2s_catalog.in
 
-This will create the configuration and parallel input files for site "xx" in the :file:`i2srun-config` directory, using
+This will create the configuration and parallel input files for site "xx" in the :file:`i2srun-config` directory (which
+can be any existing directory, though it is usually best if it is empty), using
 :file:`xx_i2s_header.in` to set the general I2S options for all the parallel input files and :file:`xx_i2s_catalog.in`
-to figure out which interferograms exist to be processed.
+to figure out which interferograms exist to be processed. These two files may be named whatever you wish and stored
+wherever you wish so long as you give the proper paths to them as the last two arguments.
 
 .. note::
    The "xx" in the header and catalog file names need not correspond to the "xx" used for the site ID. Your header
@@ -66,7 +182,8 @@ An example of the second method is::
 
 This will automatically extract a catalog of interferograms from all the input files passed (those matching ``*.i2s.in``)
 and take the header from the first of those files. Exactly like the first method, a config file and individual I2S
-input files will be placed in the directory :file:`i2srun-config`.
+input files will be placed in the directory :file:`i2srun-config`. As with the first option in this step, the directory
+(given in the above example as :file:`./i2srun-config` may be any existing directory).
 
 Both of these methods have the ``--split-by`` option, which controls how finely divided the interferograms should be
 for parallel processing. The default is to split them up so that each day will be run separately, but they can also be
@@ -80,6 +197,7 @@ runs. Details of the configuration file follow, but generally the minimum you ne
 
     1. Set ``run_top_dir`` in the ``[Run]`` section to the location where you want your I2S runs to happen.
     2. For each site in the ``[Sites]`` section, set:
+
         * ``slices``: whether it uses slices or not
         * ``site_root_dir``: the path to the directory where your slice date folders (i.e. the :file:`YYMMDD.R` folders)
           or your interferograms are.
@@ -87,6 +205,7 @@ runs. Details of the configuration file follow, but generally the minimum you ne
         * Set ``no_date_dir`` to ``True`` or ``1``
         * Set ``subdir`` to ``.``
         * Set ``slices_in_subdir`` to ``False`` or ``0``
+
     3. The ``i2s_input_file`` values for each year/month/day should be fine as their defaults, unless you move the
        config or generated I2S input files.
 
@@ -257,6 +376,17 @@ Each run directory will have:
 
 In the top run directory, there will also be created, by default, a file :file:`multii2s.sh` file. Analagously to
 the :file:`multiggg.sh` file, this can be used with GNU parallel to run each day/month/year simultaneously.
+
+.. note::
+   Currently, some options in the I2S input files created in the run directories are hard-coded, no matter what they
+   were in your header file or the individual input files created in Step 2. These include the interferogram or slice
+   input directory (which will always be set to the appropriate subdirectory of the run directory) and the spectrum
+   output path (which will always be set to the :file:`spectra` subdirectory of the run directory). This is done to
+   facilitate running in parallel.
+
+   These changes occur when the individual input files are copied into the run directories, so you will notice these
+   differences between the originals created in the configuration directory specified in Step 2 and their counterparts
+   in the run directories.
 
 Step 5 - Run using GNU Parallel
 -------------------------------
