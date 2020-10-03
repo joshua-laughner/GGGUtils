@@ -10,7 +10,7 @@ class MavParsingError(Exception):
     pass
 
 
-def ydh_to_timestamp(year: int, day: int, hour: Union[int, float]) -> pd.Timestamp:
+def ydh_to_timestamp(year: int, day: int, hour: Union[int, float], has_decimal=False) -> pd.Timestamp:
     """
     Convert a single year, day, and fractional hour into a Pandas timestamp.
 
@@ -19,17 +19,35 @@ def ydh_to_timestamp(year: int, day: int, hour: Union[int, float]) -> pd.Timesta
     :param hour: the hour. May contain a fractional component and be negative.
     :return: the datetime
     """
+    # There are two different formats of date in GGG files. Both give year, day of year,
+    # and hour of day, but in one year and day are always integers, while in the second
+    # year includes the days and hours as a decimal component and days includes the hours
+    # in the decimal.
+    #
+    # The tricky part is, in certain circumstances, the day or year can wrap to the next
+    # year. This happens if, for example, hour is > 24 on Dec 31. (Hour can be > 24 because
+    # day is kept the same for all measurements during the same sunrise-sunset period. So an
+    # instrument that measures across midnight UTC will have hour > 24.)
+    if has_decimal:
+        # We need to subtract off enough of the decimal part to ensure that we round correctly -
+        # this doesn't need to be super precise, just enough to make sure int() will give the
+        # right value.
+        year = round(year - 0.99*(day / 366))
+        day = round(day - 0.99*(hour / 24))
+    else:
+        year = int(year)
+        day = int(day)
     return pd.Timestamp(year, 1, 1) + pd.Timedelta(days=day - 1, hours=hour)
 
 
-def df_ydh_to_dtind(df: pd.DataFrame) -> pd.DatetimeIndex:
+def df_ydh_to_dtind(df: pd.DataFrame, has_decimal=False) -> pd.DatetimeIndex:
     """
     Create a DatetimeIndex from a .eof.csv dataframe
     :param df: a dataframe containing "year", "day" and "hour" columns that are the year, day-of-year (1-based), and
      fractional hour of their rows.
     :return: a DatetimeIndex with the corresponding datetimes.
     """
-    return pd.DatetimeIndex([ydh_to_timestamp(int(y), d, h) for y, d, h in zip(df.year, df.day, df.hour)])
+    return pd.DatetimeIndex([ydh_to_timestamp(y, d, h, has_decimal=has_decimal) for y, d, h in zip(df.year, df.day, df.hour)])
 
 
 def _read_private_nc(ncfile: str, date_index: bool = True):
