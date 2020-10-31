@@ -236,3 +236,54 @@ def _parse_mav_block(fh, exclude_cell=True, indexing='spectrum'):
     else:
         raise ValueError('Unknown indexing type: {}'.format(indexing))
 
+
+def read_out_file(out_file, as_dataframes=True):
+    """Read a standard GGG post processing out file (*not* one of the .csv files)
+
+    Parameters
+    ----------
+    out_file : pathlike
+        The path to the file to read.
+
+    as_dataframes : bool
+        If `True` (default), return the file data as a dataframe. If `False`, return it as a dictionary
+        of arrays.
+
+    Returns
+    -------
+    pandas.DataFrame or dict:
+        The data from the file.
+    """
+    n_header_lines = _get_num_header_lines(out_file)
+    df = pd.read_csv(out_file, header=n_header_lines-1, sep='\s+')
+    if not as_dataframes:
+        return df.to_dict()
+    else:
+        return df
+
+
+def _get_num_header_lines(filename):
+    """Get the number of header lines in a standard GGG file
+
+    This assumes that the file specified begins with a line with two or more numbers: the number of header rows and the number
+    of data columns.
+
+    Parameters
+    ----------
+
+    filename: pathlike
+        The file to read
+
+    Returns
+    -------
+    int 
+        The number of header lines
+    """
+    with open(filename, 'r') as fobj:
+        header_info = fobj.readline()
+
+    if ',' in header_info:
+        header = header_info.split(',')
+    else:
+        header = header_info.split()
+    return int(header[0])
