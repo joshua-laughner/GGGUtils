@@ -30,10 +30,10 @@ def ydh_to_timestamp(year: int, day: int, hour: Union[int, float], has_decimal=F
     # instrument that measures across midnight UTC will have hour > 24.)
     if has_decimal:
         # We need to subtract off enough of the decimal part to ensure that we round correctly -
-        # this doesn't need to be super precise, just enough to make sure int() will give the
+        # this doesn't need to be super precise, just enough to make sure round() will give the
         # right value.
-        year = round(year - 0.99*(day / 366))
-        day = round(day - 0.99*(hour / 24))
+        year = int(round(year - 0.99*(day / 366)))
+        day = int(round(day - 0.99*(hour / 24)))
     else:
         year = int(year)
         day = int(day)
