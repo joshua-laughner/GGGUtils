@@ -604,8 +604,10 @@ def _find_site_datekey(site_cfg, datestr):
         raise exceptions.SiteDateException('No key matching "{}" found in site "{}"'.format(datestr, site_cfg.name))
 
 
-def get_ggg_subpath(*dir_parts):
-    return os.path.join(os.path.expandvars('$GGGPATH'), *dir_parts)
+def get_ggg_subpath(*dir_parts, gggpath=None):
+    if gggpath is None:
+        gggpath = os.path.expandvars('$GGGPATH')
+    return os.path.join(gggpath, *dir_parts)
 
 
 def find_by_glob(pattern: str) -> str:

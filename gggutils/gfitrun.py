@@ -111,7 +111,7 @@ def create_runlogs_from_scratch(cfg_file, clean_spectrum_links='ask', do_slice_s
         site_all_spectra_dir = _link_site_spectra(site, cfg, clean_links=clean_spectrum_links)
         _add_dir_to_data_part(site_all_spectra_dir, add_to_list_data_part=True)
         try:
-            list_file = _make_spectra_list(site_all_spectra_dir, '{}_targets.gnd'.format(site))
+            list_file = make_spectra_list(site_all_spectra_dir, '{}_targets.gnd'.format(site))
             sunrun_file = _create_sunrun(list_file, site)
         except GGGInputException as err:
             logger.warning('Skipping {}: {}'.format(site, err))
@@ -325,13 +325,13 @@ def _concate_runlogs(runlogs, site_id, delete_date_runlogs=False):
                 os.remove(this_runlog)
 
 
-def _make_spectra_list(all_spectra_dir, list_basename, detectors='ab', req_all_detectors=True):
+def make_spectra_list(all_spectra_dir, list_basename, detectors='ab', req_all_detectors=True, gggpath=None):
     if 'a' not in detectors:
         raise NotImplementedError('a must be in the detectors at present')
     else:
         detectors = detectors.replace('a', '')
 
-    list_dir = runutils.get_ggg_subpath('lists')
+    list_dir = runutils.get_ggg_subpath('lists', gggpath=gggpath)
 
     if not os.path.exists(list_dir):
         os.mkdir(list_dir)
@@ -548,7 +548,7 @@ def parse_list_args(parser: ArgumentParser):
     parser.add_argument('-m', '--allow-missing-detectors', dest='req_all_detectors', action='store_false',
                         help='By default, if a given spectrum is missing any of the requested detectors, is is skipped. '
                              'Set this flag to allow e.g. an InGaAs spectrum without a corresponding Si spectrum.')
-    parser.set_defaults(driver_fxn=_make_spectra_list)
+    parser.set_defaults(driver_fxn=make_spectra_list)
 
 
 def parse_scratch_runlog_args(parser: ArgumentParser):
