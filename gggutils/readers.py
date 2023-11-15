@@ -273,7 +273,7 @@ def read_out_file(out_file, as_dataframes=True):
         The data from the file.
     """
     n_header_lines = _get_num_header_lines(out_file)
-    df = pd.read_csv(out_file, header=n_header_lines-1, sep='\s+')
+    df = pd.read_csv(out_file, header=n_header_lines-1, sep=r'\s+')
     if not as_dataframes:
         return df.to_dict()
     else:
@@ -305,3 +305,37 @@ def _get_num_header_lines(filename):
     else:
         header = header_info.split()
     return int(header[0])
+
+
+def read_spt(spt_file, convert_transmittance=True):
+    """Read a spectral fit file
+
+    Parameters
+    ----------
+    spt_file: pathlike
+        Path to the spectral fit text file to read
+
+    convert_transmittance: bool
+        The total transmittance columns, ``Tm`` and ``Tc``, are not
+        comparable to the individual gases absorbance in the file.
+        By default this function converts them to comparable units,
+        set ``convert_transmittance = False`` to disable that.
+
+    Returns
+    -------
+    pd.DataFrame
+        A dataframe containing the spectral fit information.
+    """
+    with open(spt_file) as f:
+        f.readline()
+        lineparts = f.readline().split()
+        sza = float(lineparts[4])
+        xzo = float(lineparts[10])
+        #print(f'xzo = {xzo}')
+        
+    df = pd.read_csv(spt_file, sep=r'\s+', header=2).set_index('Freq')
+    if convert_transmittance:
+        df['Tm'] = (df['Tm']/df['Cont'] - xzo)/(1-xzo)
+        df['Tc'] = (df['Tc']/df['Cont'] - xzo)/(1-xzo)
+    df['sza'] = sza
+    return df
