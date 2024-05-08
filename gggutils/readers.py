@@ -1,5 +1,7 @@
 import netCDF4 as ncdf
+import numpy as np
 import pandas as pd
+from pathlib import Path
 import re
 from jllutils.fileops import ncio
 
@@ -339,3 +341,80 @@ def read_spt(spt_file, convert_transmittance=True):
         df['Tc'] = (df['Tc']/df['Cont'] - xzo)/(1-xzo)
     df['sza'] = sza
     return df
+
+
+def read_multi_nc_dataframe(nc_files: Sequence[str], variables: Sequence[str], flag0_only: bool = False, quiet: bool = False):
+    data = {v: [] for v in variables}
+    data['file'] = []
+    msg_width = 0
+    nfile = len(nc_files)
+    for ifile, nc_file in enumerate(nc_files):
+        msg = f'\rReading {Path(nc_file).name} ({ifile+1} of {nfile})'
+        if not quiet:
+            msg_width = max(msg_width, len(msg))
+            print(msg.ljust(msg_width), end='')
+        with ncdf.Dataset(nc_file) as ds:
+            if flag0_only and 'flag' in ds.variables.keys():
+                qq = ds['flag'][:] == 0
+            else:
+                qq = np.ones(ds['time'].shape, dtype=bool)
+
+            for v in variables:
+                data[v].append(ds[v][:][qq])
+
+        data['file'].append(np.full(qq.shape, str(nc_file)))
+
+    # This could be more efficient if we queried all the files for their lengths first,
+    # then preallocated numpy arrays and inserted the values, but that's also way more
+    # complex.
+    data = {k: np.concatenate(v) for k, v in data.items()}
+    return pd.DataFrame(data)
+
+
+def read_multi_nc_xarray(nc_files: Sequence[str], variables: Sequence[str], flag0_only: bool = False, quiet: bool = False):
+    try:
+        import xarray as xr
+    except ImportError:
+        raise ImportError('The read_multi_nc_xarray function requires the xarray package')
+    
+    data = {v: [] for v in variables}
+    first_dims = dict()
+    msg_width = 0
+    nfile = len(nc_files)
+    for ifile, nc_file in enumerate(nc_files):
+        with xr.open_dataset(nc_file) as ds:
+            msg = f'\rReading {Path(nc_file).name} ({ifile+1} of {nfile})'
+            if not quiet:
+                msg_width = max(msg_width, len(msg))
+                print(msg.ljust(msg_width), end='')
+            for v in variables:
+                var_data = ds[v]
+            
+                if v not in first_dims:
+                    first_dims[v] = var_data.dims[0]
+                elif first_dims[v] != var_data.dims[0]:
+                    raise ValueError(f'In file {nc_file}, the first dimension of {v} ({var_data.dims[0]}) differs from that of previous files ({first_dims[v]})')
+
+                if not flag0_only:
+                    data[v].append(var_data)
+                elif var_data.dims[0] == 'time' and 'flag' in ds:
+                    qq = ds['flag'] == 0
+                    data[v].append(var_data.isel(time=qq))
+
+            if 'time' in first_dims.values():
+                data.setdefault('time_file', [])
+                data['time_file'].append(
+                    xr.DataArray(np.full(ds.time.shape, str(nc_file)), dims=['time'], coords={'time': ds.time})
+                )
+                if 'time_file' not in first_dims:
+                    first_dims['time_file'] = 'time'
+            if 'prior_time' in first_dims.values():
+                data.setdefault('prior_time_file', [])
+                data['prior_time_file'].append(
+                    xr.DataArray(np.full(ds.prior_time.shape, str(nc_file)), dims=['prior_time'], coords={'prior_time': ds.prior_time})
+                )
+                if 'prior_time_file' not in first_dims:
+                    first_dims['prior_time_file'] = 'prior_time'
+
+    data = {k: xr.concat(v, dim=first_dims[k]) for k, v in data.items()}
+    return xr.Dataset(data)
